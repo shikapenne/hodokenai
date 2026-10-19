@@ -86,7 +86,7 @@ Mac がない場合は、Mac のクラウドビルドサービス（Codemagic �
 ### 予定している機能のメモ
 
 - **ネックレスの種類を増やす**：見た目は `game3d.js` の `METAL`、音は `VOICE`、輪の形は `linkGeo`／`pearlGeo`。真珠のように輪の形ごと変える種類も追加できます。
-- **長さの調整**：`levels.json` の `chains` の数字が輪の数。長さを変えたら `tools/levelgen/` で絡まりを作り直します（例：`node export.js '{"chains":[{"links":120}]}' 7 2800 ../src/levels/L6.b64`）。
+- **長さの調整**：`levels.json` の `chains` の数字が輪の数（普通の鎖は1輪8px、喜平は12px）。スマホの重さの目安は、1レベルの輪の合計がおよそ370個まで。長さを変えたら `tools/levelgen/` で絡まりを作り直します（例：`node export.js '{"chains":[{"links":120}]}' 7 2800 ../src/levels/L6.b64`）。
 - **オンラインランキング（タイムだけ）**：サーバーが必要です。
   - 手軽なのは Firebase や Supabase に「レベルID・名前・タイム」を保存する方法です。
   - Game Center（iPhone）と Google Play Games（Android）のリーダーボードを使う方法もありますが、iPhoneとAndroidで別々のランキングになります。

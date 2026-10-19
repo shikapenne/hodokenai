@@ -9,6 +9,7 @@ const METAL = {
   silver: { color: 0xd4d9e2, metal: 1.0, rough: 0.24 },
   rose:   { color: 0xe7a68e, metal: 1.0, rough: 0.3 },
   pearl:  { color: 0xf3ecdf, metal: 0.0, rough: 0.22 },
+  kihei:  { color: 0xf2b230, metal: 1.0, rough: 0.16 },
 };
 
 const $ = id => document.getElementById(id);
@@ -87,6 +88,9 @@ scene.add(sun);
 let linkMeshes = [], pearlMeshes = [], extras = [];
 const linkGeo = new THREE.TorusGeometry(2.95, 1.05, 6, 14);
 const pearlGeo = new THREE.SphereGeometry(4.3, 14, 10);
+// 喜平 (Cuban) links: fat, flattened, packed tight and twisted so they lie like a heavy rope of gold
+const kiheiGeo = new THREE.TorusGeometry(4.0, 2.5, 8, 20);
+kiheiGeo.scale(1, 1, 0.55);
 // stones: each necklace gets its own cut. All lie flat, top facing up, the end that hangs away from the chain toward +Z.
 function flatExtrude(shape, depth) {
   const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 1.1, bevelSize: 0.9, bevelSegments: 2, curveSegments: 14 });
@@ -124,24 +128,30 @@ function buildChains() {
       const m = new THREE.InstancedMesh(pearlGeo, metalMat('pearl'), c.n);
       m.castShadow = m.receiveShadow = true; m.userData = { chain: c }; scene.add(m); pearlMeshes.push(m);
     } else {
-      const m = new THREE.InstancedMesh(linkGeo, metalMat(c.kind), nSeg);
-      m.castShadow = m.receiveShadow = true; m.userData = { chain: c }; scene.add(m); linkMeshes.push(m);
+      const kh = c.kind === 'kihei';
+      const m = new THREE.InstancedMesh(kh ? kiheiGeo : linkGeo, metalMat(c.kind), nSeg);
+      m.castShadow = m.receiveShadow = true; m.userData = { chain: c, kihei: kh }; scene.add(m); linkMeshes.push(m);
     }
     // pendant hanging from the middle of the chain on a small bail
+    const big = c.r / R;
+    if (c.kind !== 'kihei') {
     const cut = GEM_CUTS[ci % GEM_CUTS.length];
     const gem = new THREE.Mesh(GEM_GEOS[cut], new THREE.MeshStandardMaterial({ color: GEMS[ci % GEMS.length], metalness: 0.35, roughness: 0.12, envMapIntensity: 1.3, emissive: GEMS[ci % GEMS.length], emissiveIntensity: 0.12, flatShading: cut === 'round' || cut === 'oval' }));
     gem.scale.setScalar(1.2); gem.castShadow = true; gem.userData = { at: c.start + (c.n >> 1), chain: c, hang: 10 }; scene.add(gem); extras.push(gem);
     const bail = new THREE.Mesh(bailGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); bail.castShadow = true;
     bail.userData = { at: c.start + (c.n >> 1), chain: c, hang: 3.2, bail: true }; scene.add(bail); extras.push(bail);
-    const clasp = new THREE.Mesh(claspGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); clasp.castShadow = true;
+    }
+    const clasp = new THREE.Mesh(claspGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); clasp.castShadow = true; clasp.scale.setScalar(big);
     clasp.userData = { at: c.start, next: c.start + 1, chain: c }; scene.add(clasp); extras.push(clasp);
-    const ring = new THREE.Mesh(ringGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); ring.castShadow = true;
+    const ring = new THREE.Mesh(ringGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); ring.castShadow = true; ring.scale.setScalar(big);
     ring.userData = { at: c.start + c.n - 1, next: c.start + c.n - 2, chain: c }; scene.add(ring); extras.push(ring);
   });
 }
 
 const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 const _s = new THREE.Vector3(1.55, 1, 1);
+const _sK = new THREE.Vector3(1.95, 1, 1);
+const _twistA = new THREE.Matrix4().makeRotationX(0.75), _twistB = new THREE.Matrix4().makeRotationX(-0.75);
 function basisAlong(ax, ay, az, bx, by, bz, standing) {
   // segment direction in three coords
   _x.set(bx - ax, bz - az, by - ay); const l = _x.length() || 1; _x.multiplyScalar(1 / l);
@@ -157,10 +167,11 @@ function syncChains() {
   for (const m of linkMeshes) {
     const c = m.userData.chain;
     if (c.removed) continue;
+    const kh = m.userData.kihei;
     for (let k = 0; k < c.n - 1; k++) {
       const a = c.start + k, b = a + 1;
-      basisAlong(px[a], py[a], pz[a], px[b], py[b], pz[b], k & 1);
-      _m.scale(_s);
+      basisAlong(px[a], py[a], pz[a], px[b], py[b], pz[b], kh ? 0 : k & 1);
+      if (kh) { _m.multiply(k & 1 ? _twistA : _twistB); _m.scale(_sK); } else _m.scale(_s);
       _m.setPosition((px[a] + px[b]) / 2 - W / 2, (pz[a] + pz[b]) / 2, (py[a] + py[b]) / 2 - H / 2);
       m.setMatrixAt(k, _m);
     }
@@ -238,6 +249,7 @@ const VOICE = {
   rose:   { lo: 5000, hi: 9000, q: 22, dec: 0.02, ping: 0.1 },
   silver: { lo: 6500, hi: 11500, q: 26, dec: 0.026, ping: 0.16 },
   pearl:  { lo: 2400, hi: 4200, q: 8, dec: 0.012, ping: 0 },
+  kihei:  { lo: 2200, hi: 5200, q: 12, dec: 0.035, ping: 0.06 },
 };
 function grain(kind, vol, pan) {
   const v = VOICE[kind] || VOICE.gold, t = audio.currentTime + Math.random() * 0.012;

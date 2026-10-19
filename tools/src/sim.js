@@ -1,6 +1,9 @@
 // ===== Necklace physics core (Verlet + PBD, 3D capsules, top-down) =====
 const R = 4;          // chain radius (world px)
 const D = 8;          // link length
+// chains that are built differently: thick Cuban-style gold uses fat, long links
+const CHAIN_SIZE = { kihei: { r: 6.5, d: 12 } };
+function sizeOf(kind) { return CHAIN_SIZE[kind] || { r: R, d: D }; }
 const SUB = 8;        // substeps per frame
 const DT = 1 / 60 / SUB;
 let GRAV_ACC = 300;  // low gravity: piles stay put instead of creeping
@@ -49,6 +52,7 @@ class Sim {
     for (let ci = 0; ci < spec.chains.length; ci++) {
       const c = spec.chains[ci];
       const n = c.links + 1;
+      const { r: cr, d: cd } = sizeOf(c.kind);
       let x = cx + (rnd() - 0.5) * Rxy, y = cy + (rnd() - 0.5) * Rxy, z = R + rnd() * (Zmax - R);
       let dx = rnd() - 0.5, dy = rnd() - 0.5, dz = rnd() - 0.5;
       for (let k = 0; k < n; k++) {
@@ -62,7 +66,7 @@ class Sim {
             if (z > Zmax - 10 || z < R + 6) ez += ddz * 0.04;
             const l = Math.hypot(ex, ey, ez) || 1;
             ex /= l; ey /= l; ez /= l;
-            const qx = x + ex * D, qy = y + ey * D, qz = Math.max(R, Math.min(Zmax, z + ez * D));
+            const qx = x + ex * cd, qy = y + ey * cd, qz = Math.max(cr, Math.min(Zmax, z + ez * cd));
             let mn = 1e9;
             for (let j = 0; j < placed.length; j++) {
               const p = placed[j];
@@ -72,7 +76,7 @@ class Sim {
             }
             mn = Math.sqrt(mn);
             if (mn > bestD) { bestD = mn; best = [qx, qy, qz, ex, ey, ez]; }
-            if (mn >= 2.4 * R) break;
+            if (mn >= 2.4 * cr) break;
           }
           [x, y, z, dx, dy, dz] = best;
         }
@@ -82,16 +86,21 @@ class Sim {
         if (!preset) placed.push({ x, y, z, c: ci, k });
         if (k < n - 1) { sa.push(i); sb.push(i + 1); sc.push(ci); sk.push(k); }
       }
-      this.chains.push({ start: base, n, kind: c.kind });
+      this.chains.push({ start: base, n, kind: c.kind, r: cr, d: cd });
       base += n;
     }
     this.sa = Int32Array.from(sa); this.sb = Int32Array.from(sb);
     this.sc = Int32Array.from(sc); this.sk = Int32Array.from(sk);
     this.S = sa.length;
+    this.rad = new Float64Array(total); this.len = new Float64Array(this.S); this.srad = new Float64Array(this.S);
+    for (const ch of this.chains) for (let i = ch.start; i < ch.start + ch.n; i++) this.rad[i] = ch.r;
+    for (let q = 0; q < this.S; q++) { const ch = this.chains[sc[q]]; this.len[q] = ch.d; this.srad[q] = ch.r; }
     this.broken = new Uint8Array(this.S);
     this.stretch = new Float32Array(this.S);
     // spatial grid
-    this.C = 16;
+    // grid cells must cover the largest contact reach (two half-links plus both radii)
+    const maxR = Math.max(...this.chains.map(ch => ch.r)), maxD = Math.max(...this.chains.map(ch => ch.d));
+    this.C = Math.max(16, Math.ceil(16 * (maxD + 2 * maxR + 0.5) / (D + 2 * R + 0.5)));
     this.gw = Math.ceil(W / this.C) + 1; this.gh = Math.ceil(H / this.C) + 1;
     this.head = new Int32Array(this.gw * this.gh);
     this.next = new Int32Array(this.S);
@@ -162,7 +171,7 @@ class Sim {
       const ws = wa + wb; if (ws === 0) continue;
       const dx = px[b] - px[a], dy = py[b] - py[a], dz = pz[b] - pz[a];
       const l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
-      const k = (l - D) / l / ws;
+      const k = (l - this.len[s]) / l / ws;
       px[a] += dx * k * wa; py[a] += dy * k * wa; pz[a] += dz * k * wa;
       px[b] -= dx * k * wb; py[b] -= dy * k * wb; pz[b] -= dz * k * wb;
     }
@@ -171,10 +180,10 @@ class Sim {
   // metal doesn't stretch: hard limit, the grabbed point gets dragged back too
   strainLimit(rev) {
     const { px, py, pz, sa, sb, S, held } = this;
-    const LIM = D * 1.04;
     for (let q = 0; q < S; q++) {
       const s = rev ? S - 1 - q : q;
       if (this.broken[s]) continue;
+      const LIM = this.len[s] * 1.04;
       const a = sa[s], b = sb[s];
       const dx = px[b] - px[a], dy = py[b] - py[a], dz = pz[b] - pz[a];
       const l = Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -189,7 +198,7 @@ class Sim {
   solveCollisions() {
     this.buildGrid();
     const { px, py, pz, ox, oy, oz, w, sa, sb, sc, sk, C, gw, gh, head, next, awake } = this;
-    const minD = 2 * R, minD2 = minD * minD;
+    const { len, srad } = this;
     for (let s = 0; s < this.S; s++) {
       if (this.broken[s]) continue;
       const awS = awake[s];
@@ -204,9 +213,11 @@ class Sim {
             if (sc[t] === sc[s] && Math.abs(sk[t] - sk[s]) <= 2) continue;
             const b0 = sa[t], b1 = sb[t];
             const qx = mx - (px[b0] + px[b1]) * 0.5, qy = my - (py[b0] + py[b1]) * 0.5;
-            if (qx * qx + qy * qy > 420) continue;
+            const minD = srad[s] + srad[t], minD2 = minD * minD;
+            const reach = (len[s] + len[t]) * 0.5 * 1.05 + minD + 0.5;
+            if (qx * qx + qy * qy > reach * reach) continue;
             const qz = (pz[a0] + pz[a1] - pz[b0] - pz[b1]) * 0.5;
-            if (qz > 20.5 || qz < -20.5) continue;
+            if (qz > reach || qz < -reach) continue;
             // closest points between segments
             const d1x = px[a1] - px[a0], d1y = py[a1] - py[a0], d1z = pz[a1] - pz[a0];
             const d2x = px[b1] - px[b0], d2y = py[b1] - py[b0], d2z = pz[b1] - pz[b0];
@@ -278,10 +289,11 @@ class Sim {
     const { px, py, pz, W, H, box } = this;
     const { ox, oy, held } = this;
     for (let i = 0; i < this.N; i++) {
-      if (pz[i] < R) {
+      const ri = this.rad[i];
+      if (pz[i] < ri) {
         // Coulomb friction with the velvet: the harder it is pressed down, the less it slides
-        const press = R - pz[i];
-        pz[i] = R;
+        const press = ri - pz[i];
+        pz[i] = ri;
         if (!held[i] && this.w[i] > 0) {
           const dx = px[i] - ox[i], dy = py[i] - oy[i], d = Math.hypot(dx, dy);
           const hold = MU_TRAY * press;
@@ -289,8 +301,8 @@ class Sim {
           else { const k = hold / d; px[i] -= dx * k; py[i] -= dy * k; }
         }
       }
-      if (px[i] < R) px[i] = R; else if (px[i] > W - R) px[i] = W - R;
-      if (py[i] < R) py[i] = R; else if (py[i] > H - R) py[i] = H - R;
+      if (px[i] < ri) px[i] = ri; else if (px[i] > W - ri) px[i] = W - ri;
+      if (py[i] < ri) py[i] = ri; else if (py[i] > H - ri) py[i] = H - ri;
       if (box) {
         const dx = px[i] - box.cx, dy = py[i] - box.cy, d = Math.hypot(dx, dy);
         if (d > box.r) { px[i] = box.cx + dx / d * box.r; py[i] = box.cy + dy / d * box.r; }
@@ -314,7 +326,7 @@ class Sim {
         const v = Math.sqrt(vx * vx + vy * vy + vz * vz);
         if (v > cap) { const k = cap / v; vx *= k; vy *= k; vz *= k; }
       }
-      if (pz[i] <= R + 0.6) { vx *= this.gk || (this.gk = Math.pow(GROUND_KEEP, SUB / this.sub)); vy *= this.gk; } else { vx *= 0.995; vy *= 0.995; vz *= 0.995; }
+      if (pz[i] <= this.rad[i] + 0.6) { vx *= this.gk || (this.gk = Math.pow(GROUND_KEEP, SUB / this.sub)); vy *= this.gk; } else { vx *= 0.995; vy *= 0.995; vz *= 0.995; }
       const sp = Math.sqrt(vx * vx + vy * vy + vz * vz);
       if (sp > this.vmax) { const k = this.vmax / sp; vx *= k; vy *= k; vz *= k; }
       ox[i] = px[i]; oy[i] = py[i]; oz[i] = pz[i];
@@ -359,7 +371,7 @@ class Sim {
       const ch = this.chainOf(g);
       let mx = 0;
       for (let k = Math.max(ch.start, g - 4); k < Math.min(ch.start + ch.n - 1, g + 4); k++) {
-        const l = Math.hypot(px[k + 1] - px[k], py[k + 1] - py[k], pz[k + 1] - pz[k]) / D - 1;
+        const l = Math.hypot(px[k + 1] - px[k], py[k + 1] - py[k], pz[k + 1] - pz[k]) / ch.d - 1;
         if (l > mx) mx = l;
       }
       gr.taut = mx;
@@ -371,7 +383,7 @@ class Sim {
     }
     for (let i = 0; i < this.N; i++) {
       const m = Math.abs(px[i] - ox[i]) + Math.abs(py[i] - oy[i]) + Math.abs(pz[i] - oz[i]);
-      const supported = pz[i] <= R + 0.6 || this.touch[i];
+      const supported = pz[i] <= this.rad[i] + 0.6 || this.touch[i];
       if (this.held[i] || m > (supported ? 0.03 : 0.004)) {
         if (rest[i] >= SLEEP) this.waking[i] = WAKE_EASE * this.sub;
         this.rest[i] = 0;
@@ -408,7 +420,7 @@ class Sim {
       if (this.broken[s]) { this.stretch[s] = 0; continue; }
       const a = sa[s], b = sb[s];
       const l = Math.hypot(px[b] - px[a], py[b] - py[a], pz[b] - pz[a]);
-      const st = l / D - 1;
+      const st = l / this.len[s] - 1;
       this.stretch[s] = st;
       if (st > mx) { mx = st; ms = s; }
     }
