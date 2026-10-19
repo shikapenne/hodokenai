@@ -21,6 +21,7 @@ const GRAB_W = 0.06;  // grabbed point is heavy, but the chain can still hold it
 const LIFT = 30;
 const LIFT_TIME = 0.3; // seconds to lift a grabbed link
 const MU = 3.0;      // chain-on-chain friction
+let GRIP = 0.9;          // share of sliding between touching chains that is cancelled outright (rope-like grip)
 const FRIC_MAX = 0.35; // px a single contact may drag per substep: more than this and links can be pushed through each other
 let MU_TRAY = 3.0;   // chain-on-velvet friction
 let GROUND_KEEP = 0.85; // velocity kept per substep when lying on the tray
@@ -294,7 +295,7 @@ class Sim {
             let tx = vax - vbx, ty = vay - vby, tz = vaz - vbz;
             const vn = tx * nx + ty * ny + tz * nz;
             tx -= vn * nx; ty -= vn * ny; tz -= vn * nz;
-            const fl = Math.min(MU * pen, Math.hypot(tx, ty, tz), FRIC_MAX);
+            const fl = Math.min(MU * pen + GRIP * Math.hypot(tx, ty, tz), Math.hypot(tx, ty, tz), FRIC_MAX);
             const tl = Math.hypot(tx, ty, tz);
             if (tl > 1e-6) {
               const k = fl / tl / sw;
