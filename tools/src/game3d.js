@@ -625,14 +625,94 @@ function checkFree() {
   });
   if (left === 0 && state === 'play') { state = 'clearing'; showToast('ぜんぶ、ほどけた', 1600); setTimeout(win, 1500); }
 }
+let lastResult = null; // { id, name, ms, rank, total }
 function win() {
   state = 'over';
   const prev = bestOf(level), isBest = !prev || elapsed < prev;
   if (isBest) store('hodoke3-best-' + level, String(Math.round(elapsed)));
   $('winRes').innerHTML = `<b>${fmt(elapsed)}</b>${isBest ? '　自己ベスト' : '　最速 ' + fmt(prev)}<br>${LEVELS[level].name}をほどきました。`;
   $('nextBtn').hidden = level >= LEVELS.length - 1;
+  lastResult = { id: LEVELS[level].id, name: LEVELS[level].name, ms: Math.round(elapsed) };
   $('win').hidden = false;
+  showRankingAfterWin();
 }
+
+// ---------- online ranking (Supabase) ----------
+// Fill these in from your Supabase project (Settings > API). Empty = ranking hidden, X posting still works.
+const RANKING = { url: '', anonKey: '' };
+const STORE_URL = ''; // store page to put in posts once the app is public
+const rankingOn = () => !!(RANKING.url && RANKING.anonKey);
+function playerId() {
+  let id = store('hodoke-player');
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+    store('hodoke-player', id);
+  }
+  return id;
+}
+async function api(path, opts = {}) {
+  const res = await fetch(RANKING.url.replace(/\/$/, '') + '/rest/v1/' + path, {
+    ...opts,
+    headers: { apikey: RANKING.anonKey, Authorization: 'Bearer ' + RANKING.anonKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+  if (!res.ok) throw new Error('ranking ' + res.status);
+  return res.json();
+}
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+function showRankingAfterWin() {
+  const box = $('rankBox'), line = $('rankLine');
+  if (!rankingOn()) { box.hidden = true; return; }
+  box.hidden = false; line.textContent = '';
+  const name = store('hodoke-name');
+  if (!name) { $('nameForm').hidden = false; $('nameInput').value = ''; line.textContent = '名前を入れると全国ランキングに載ります。'; return; }
+  $('nameForm').hidden = true; submitScore(name);
+}
+async function submitScore(name) {
+  const line = $('rankLine'), r = lastResult; if (!r) return;
+  line.textContent = 'ランキングに登録しています…';
+  try {
+    const out = await api('rpc/submit_score', { method: 'POST', body: JSON.stringify({ p_level: r.id, p_player: playerId(), p_name: name, p_ms: r.ms }) });
+    r.rank = out.rank; r.total = out.total;
+    line.innerHTML = `全国 <b>${out.rank}</b> 位 ／ ${out.total} 人中` + (out.best < r.ms ? `<br>（あなたのベスト ${fmt(out.best)} の順位）` : '');
+  } catch (e) {
+    line.textContent = 'ランキングに接続できませんでした。電波のよい所で、もう一度クリアすると登録されます。';
+  }
+}
+$('nameForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('nameInput').value.replace(/\s+/g, ' ').trim().slice(0, 12);
+  if (!name) { $('nameInput').focus(); return; }
+  store('hodoke-name', name); $('nameForm').hidden = true; submitScore(name);
+});
+// leaderboard screen
+let boardLevel = 0;
+async function openBoard(i) {
+  boardLevel = i; $('board').hidden = false;
+  const tabs = $('boardTabs'); tabs.innerHTML = '';
+  LEVELS.forEach((L, k) => { const b = document.createElement('button'); b.type = 'button'; b.role = 'tab'; b.textContent = L.name; b.setAttribute('aria-selected', String(k === i)); b.onclick = () => openBoard(k); tabs.appendChild(b); });
+  const list = $('boardList'); list.innerHTML = '<li class="empty">読み込み中…</li>';
+  try {
+    const rows = await api(`scores?select=name,ms,player&level=eq.${LEVELS[i].id}&order=ms.asc,updated_at.asc&limit=50`);
+    if (boardLevel !== i) return;
+    const me = store('hodoke-player');
+    list.innerHTML = rows.length ? rows.map((r, k) => `<li class="${r.player === me ? 'me' : ''}"><span class="pos">${k + 1}</span><span class="nm">${esc(r.name)}</span><span>${fmt(r.ms)}</span></li>`).join('') : '<li class="empty">まだ記録がありません。最初の一人になれます。</li>';
+  } catch (e) { list.innerHTML = '<li class="empty">ランキングに接続できませんでした。</li>'; }
+}
+$('boardBtn').onclick = () => openBoard(level);
+$('boardClose').onclick = () => { $('board').hidden = true; };
+$('boardBtn').hidden = !rankingOn();
+
+// ---------- post to X ----------
+$('shareBtn').onclick = () => {
+  const r = lastResult; if (!r) return;
+  let text = `絡まったネックレスをほどくゲーム「ほどけない」\n${r.name}を ${fmt(r.ms)} でほどいた`;
+  if (r.rank) text += `（全国 ${r.rank} 位／${r.total} 人中）`;
+  text += '\n#ほどけない';
+  const url = 'https://x.com/intent/post?text=' + encodeURIComponent(text) + (STORE_URL ? '&url=' + encodeURIComponent(STORE_URL) : '');
+  // opens the X app if installed, otherwise the browser; the game stays where it was
+  const w = window.open(url, '_blank', 'noopener');
+  if (!w) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }
+};
 // ---------- pause ----------
 let pausedAt = 0;
 function pauseGame() {

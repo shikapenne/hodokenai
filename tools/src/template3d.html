@@ -95,6 +95,24 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .res { font-size: 14px; color: var(--muted); line-height: 1.8; font-variant-numeric: tabular-nums; }
 .res b { color: var(--ivory); font-size: 22px; font-weight: 700; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.rank-box { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.name-row { display: grid; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.name-input { display: flex; gap: 8px; }
+.name-input input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--ivory); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.name-input input:focus-visible { outline: 2px solid var(--brass); outline-offset: 1px; }
+.rank-line { font-size: 14px; color: var(--muted); line-height: 1.7; font-variant-numeric: tabular-nums; }
+.rank-line b { color: var(--brass); font-size: 20px; }
+.btn.x { background: #0d0b12; border-color: rgba(241,232,216,0.35); }
+.board-card { width: min(420px, 100%); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs button { font: inherit; font-size: 13px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+.tabs button[aria-selected="true"] { color: #1a1326; background: var(--brass); border-color: var(--brass); font-weight: 700; }
+.board-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 52vh; overflow-y: auto; font-variant-numeric: tabular-nums; }
+.board-list li { display: grid; grid-template-columns: 2.4em 1fr auto; gap: 10px; padding: 7px 10px; border-radius: 8px; background: rgba(255,255,255,0.03); font-size: 14px; }
+.board-list li.me { background: rgba(209,171,85,0.18); }
+.board-list .pos { color: var(--brass); font-weight: 700; text-align: right; }
+.board-list .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-list .empty { display: block; color: var(--muted); background: none; }
 .toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 3; font-size: 13px; color: var(--muted); pointer-events: none; transition: opacity .6s; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
 </style>
@@ -118,6 +136,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
       <div class="title">ほどけない</div>
       <p class="lead">引き出しの奥で絡まったネックレスを、ほどくゲームです。結び目は、焦って引くほど固く締まります。</p>
       <div class="levels" id="levels"></div>
+      <button class="btn" id="boardBtn" type="button" hidden>ランキングを見る</button>
       <div class="rules">
         <div><b>つまむ</b>　鎖をタッチ（左クリック）して引く。0.3秒かけて持ち上がり、ほかの鎖の上を越えられます。</div>
         <div><b>押さえる</b>　鎖を二本指で、片方で押さえてもう片方で引く。PCは右クリックで押さえる。</div>
@@ -139,13 +158,30 @@ button { font: inherit; color: inherit; cursor: pointer; }
     </div>
   </div>
 
+  <div class="overlay" id="board" hidden>
+    <div class="card board-card">
+      <div class="big">ランキング</div>
+      <div class="tabs" id="boardTabs" role="tablist"></div>
+      <ol class="board-list" id="boardList"></ol>
+      <button class="btn" id="boardClose" type="button">閉じる</button>
+    </div>
+  </div>
+
   <div class="overlay" id="win" hidden>
     <div class="card">
       <div class="big">ほどけた</div>
       <div class="res" id="winRes"></div>
+      <div class="rank-box" id="rankBox" hidden>
+        <form class="name-row" id="nameForm" hidden>
+          <label for="nameInput">ランキングに載せる名前</label>
+          <div class="name-input"><input id="nameInput" maxlength="12" autocomplete="nickname" placeholder="12文字まで"><button class="btn primary" type="submit">登録</button></div>
+        </form>
+        <div class="rank-line" id="rankLine"></div>
+      </div>
       <div class="row">
         <button class="btn primary" id="nextBtn" type="button">次のレベル</button>
         <button class="btn" id="winMenu" type="button">レベル選択</button>
+        <button class="btn x" id="shareBtn" type="button">Xにポスト</button>
       </div>
     </div>
   </div>
