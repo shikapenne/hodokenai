@@ -245,11 +245,11 @@ function setMuted(m) {
 // ---- chain sounds: tiny metallic clicks synthesised from what the links are doing ----
 // gold rings a little lower and warmer, silver brighter, pearls give a soft clack
 const VOICE = {
-  gold:   { lo: 5200, hi: 9500, q: 22, dec: 0.022, ping: 0.12 },
-  rose:   { lo: 5000, hi: 9000, q: 22, dec: 0.02, ping: 0.1 },
-  silver: { lo: 6500, hi: 11500, q: 26, dec: 0.026, ping: 0.16 },
-  pearl:  { lo: 2400, hi: 4200, q: 8, dec: 0.012, ping: 0 },
-  kihei:  { lo: 2200, hi: 5200, q: 12, dec: 0.035, ping: 0.06 },
+  gold:   { lo: 2000, hi: 3800, q: 16, dec: 0.026, ping: 0.05 },
+  rose:   { lo: 1900, hi: 3600, q: 16, dec: 0.024, ping: 0.04 },
+  silver: { lo: 2500, hi: 4600, q: 18, dec: 0.03, ping: 0.06 },
+  pearl:  { lo: 900, hi: 1800, q: 6, dec: 0.012, ping: 0 },
+  kihei:  { lo: 1500, hi: 3000, q: 12, dec: 0.035, ping: 0.03 },
 };
 function grain(kind, vol, pan) {
   const v = VOICE[kind] || VOICE.gold, t = audio.currentTime + Math.random() * 0.012;
@@ -265,7 +265,7 @@ function grain(kind, vol, pan) {
   // now and then a link rings: a short high sine on top of the click
   if (Math.random() < v.ping) {
     const o = audio.createOscillator(), og = audio.createGain();
-    o.frequency.value = 7000 + Math.random() * 5000;
+    o.frequency.value = 3200 + Math.random() * 1800;
     og.gain.setValueAtTime(vol * 0.12, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.03 + Math.random() * 0.04);
     o.connect(og).connect(master); o.start(t); o.stop(t + 0.13);
   }
@@ -284,9 +284,9 @@ function chainSounds() {
   }
   if (total <= 0) { soundBudget = 0; return; }
   // number of clicks this frame grows with the motion, softly capped
-  soundBudget += Math.min(2.5, Math.sqrt(total) * 0.55);
+  soundBudget += Math.min(0.9, Math.sqrt(total) * 0.2);
   const pan = Math.max(-0.8, Math.min(0.8, panSum / total));
-  const vol = Math.min(0.07, 0.018 + total * 0.0025);
+  const vol = Math.min(0.055, 0.016 + total * 0.0018);
   const kinds = Object.keys(act);
   while (soundBudget >= 1) {
     soundBudget -= 1;
@@ -567,7 +567,7 @@ function start(i) {
   level = i; sim = makeSim(LEVELS[i]); buildChains(); pointers.clear(); camPts.clear(); gest = null; resetView();
   state = 'play'; frame = 0; started = false; elapsed = 0;
   $('lvlName').innerHTML = `${LEVELS[i].name}<small>LEVEL ${i + 1}</small>`;
-  $('menu').hidden = true; $('win').hidden = true; $('time').textContent = '0:00.0';
+  $('menu').hidden = true; $('win').hidden = true; $('pause').hidden = true; $('time').textContent = '0:00.0';
   crossings = sim.crossings(); $('cross').textContent = crossings;
   showToast('結び目は、引くほど締まります', 2600);
 }
@@ -589,7 +589,7 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 function update() {
-  if (!sim || state === 'menu') return;
+  if (!sim || state === 'menu' || state === 'paused') return;
   frame++; sim.step(); chainSounds();
   if (state !== 'play') return;
   if (started) { elapsed = performance.now() - t0; $('time').textContent = fmt(elapsed); }
@@ -627,28 +627,41 @@ function win() {
   $('nextBtn').hidden = level >= LEVELS.length - 1;
   $('win').hidden = false;
 }
+// ---------- pause ----------
+let pausedAt = 0;
+function pauseGame() {
+  if (state !== 'play') return;
+  state = 'paused'; pausedAt = performance.now();
+  for (const p of pointers.values()) sim && sim.release(p.g); pointers.clear(); camPts.clear(); gest = null;
+  $('pause').hidden = false;
+}
+function resumeGame() {
+  if (state !== 'paused') return;
+  if (started) t0 += performance.now() - pausedAt;
+  state = 'play'; last = performance.now(); acc = 0;
+  $('pause').hidden = true;
+}
 function openMenu() {
   for (const p of pointers.values()) sim && sim.release(p.g);
-  pointers.clear(); buildLevels(); $('menu').hidden = false; $('win').hidden = true;
+  pointers.clear(); buildLevels(); $('menu').hidden = false; $('win').hidden = true; $('pause').hidden = true;
   if (state !== 'over') state = 'menu';
 }
 $('menuBtn').onclick = openMenu; $('winMenu').onclick = openMenu;
 $('retryBtn').onclick = () => start(level);
 $('viewBtn').onclick = () => resetView();
+$('pauseBtn').onclick = () => { unlockAudio(); pauseGame(); };
+$('resumeBtn').onclick = () => resumeGame();
 $('soundBtn').onclick = () => { unlockAudio(); setMuted(!muted); };
 setMuted(muted);
 $('nextBtn').onclick = () => start(Math.min(LEVELS.length - 1, level + 1));
 
 // leaving the app (home button, call...) pauses the clock and the sound
-let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    hiddenAt = performance.now();
-    for (const p of pointers.values()) sim && sim.release(p.g); pointers.clear(); camPts.clear(); gest = null;
+    pauseGame(); // coming back shows the pause menu, clock stopped
     try { audio && audio.suspend(); } catch (e) {}
   } else {
-    if (hiddenAt && started) t0 += performance.now() - hiddenAt;
-    hiddenAt = 0; last = performance.now(); acc = 0;
+    last = performance.now(); acc = 0;
     try { audio && !muted && audio.resume(); } catch (e) {}
   }
 });

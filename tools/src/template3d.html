@@ -31,12 +31,18 @@ body {
 
 .topbar { position: absolute; left: 0; right: 0; top: 0; z-index: 2; display: flex; flex-direction: column; pointer-events: none; }
 .hud {
-  pointer-events: none;
+  pointer-events: none; padding-bottom: 6px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .lvl-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .snd { pointer-events: auto; font-size: 11px; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--line); background: rgba(23,18,42,0.75); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+.pausebtn { pointer-events: auto; flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: rgba(23,18,42,0.8); display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0; }
+.pausebtn span { width: 4px; height: 14px; border-radius: 2px; background: var(--ivory); }
+.pausebtn:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.pause-card { justify-items: center; text-align: center; width: min(320px, 100%); }
+.pause-list { display: grid; gap: 10px; width: 100%; }
+.pause-list .btn { padding: 13px 18px; font-size: 15px; }
 .snd:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .lvl { font-family: var(--f-display); font-weight: 800; font-size: 17px; letter-spacing: 0.04em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lvl small { display: block; font-family: var(--f-body); font-weight: 500; font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
@@ -98,16 +104,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
   <canvas id="c" aria-label="絡まったネックレスのトレイ"></canvas>
   <div class="topbar">
     <div class="hud">
-      <div class="lvl-wrap"><div class="lvl" id="lvlName">ほどけない<small>LEVEL 1</small></div><button class="snd" id="soundBtn" type="button" aria-pressed="true">音 オン</button></div>
+      <div class="lvl-wrap"><button class="pausebtn" id="pauseBtn" type="button" aria-label="ポーズ"><span></span><span></span></button><div class="lvl" id="lvlName">ほどけない<small>LEVEL 1</small></div><button class="snd" id="viewBtn" type="button">視点を戻す</button></div>
       <div class="stats">
         <div class="stat" id="crossBox"><b id="cross">–</b><span>交差</span></div>
         <div class="stat"><b id="time">0:00.0</b><span>時間</span></div>
       </div>
-    </div>
-    <div class="bar">
-      <button class="btn" id="menuBtn" type="button">レベル選択</button>
-      <button class="btn" id="viewBtn" type="button">視点を戻す</button>
-      <button class="btn" id="retryBtn" type="button">最初から</button>
     </div>
   </div>
   <div class="toast" id="toast">鎖をつまんで引いてみてください</div>
@@ -122,6 +123,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
         <div><b>押さえる</b>　鎖を二本指で、片方で押さえてもう片方で引く。PCは右クリックで押さえる。</div>
         <div><b>視点</b>　何もない所を指でなぞると移動。二本指でピンチすると拡大縮小、ひねると回転、そろえて上下になぞると傾き。PCはホイールで拡大、右ドラッグで回転と傾き。</div>
         <div><b>ゴール</b>　ほかの鎖とも自分自身とも交差しなくなったネックレスは、光って消えます。全部消せばクリア。広いベルベットに並べて広げるのがコツ。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="pause" hidden>
+    <div class="card pause-card">
+      <div class="big">ポーズ</div>
+      <div class="pause-list">
+        <button class="btn primary" id="resumeBtn" type="button">つづける</button>
+        <button class="btn" id="soundBtn" type="button" aria-pressed="true">音 オン</button>
+        <button class="btn" id="retryBtn" type="button">最初から</button>
+        <button class="btn" id="menuBtn" type="button">レベル選択</button>
       </div>
     </div>
   </div>
