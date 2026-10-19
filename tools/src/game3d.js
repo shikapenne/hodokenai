@@ -248,33 +248,26 @@ function setMuted(m) {
   $('soundBtn').setAttribute('aria-pressed', String(!m));
 }
 
-// ---- chain sounds: tiny metallic clicks synthesised from what the links are doing ----
-// gold rings a little lower and warmer, silver brighter, pearls give a soft clack
+// ---- chain sounds: a fine "shara-shara" rustle of very short, very high grains (sample B) ----
+// silver a touch brighter than gold, pearls a little softer and lower
 const VOICE = {
-  gold:   { lo: 2150, hi: 3550, q: 12, dec: 0.012, ping: 0 },
-  rose:   { lo: 2100, hi: 3400, q: 12, dec: 0.011, ping: 0 },
-  silver: { lo: 2450, hi: 4050, q: 13, dec: 0.013, ping: 0 },
-  pearl:  { lo: 1400, hi: 2350, q: 6, dec: 0.008, ping: 0 },
-  kihei:  { lo: 1600, hi: 2700, q: 10, dec: 0.016, ping: 0 },
+  gold:   { lo: 6200, hi: 9400, q: 4, d0: 0.002, d1: 0.005 },
+  rose:   { lo: 6000, hi: 9200, q: 4, d0: 0.002, d1: 0.005 },
+  silver: { lo: 7000, hi: 10500, q: 4, d0: 0.002, d1: 0.005 },
+  pearl:  { lo: 4200, hi: 6500, q: 3, d0: 0.003, d1: 0.006 },
+  kihei:  { lo: 5200, hi: 8000, q: 4, d0: 0.003, d1: 0.006 },
 };
 function grain(kind, vol, pan) {
   const v = VOICE[kind] || VOICE.gold, t = audio.currentTime + Math.random() * 0.012;
   const src = audio.createBufferSource(); src.buffer = noiseBuf;
-  const bp = audio.createBiquadFilter(); bp.type = 'bandpass';
-  bp.frequency.value = v.lo + Math.random() * (v.hi - v.lo); bp.Q.value = v.q;
-  const g = audio.createGain(), dec = v.dec * (0.6 + Math.random() * 0.8);
-  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
-  let node = src.connect(bp).connect(g);
+  const hp = audio.createBiquadFilter(); hp.type = 'highpass';
+  hp.frequency.value = v.lo + Math.random() * (v.hi - v.lo); hp.Q.value = v.q;
+  const g = audio.createGain(), dec = v.d0 + Math.random() * (v.d1 - v.d0);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.001); g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+  let node = src.connect(hp).connect(g);
   if (audio.createStereoPanner) { const p = audio.createStereoPanner(); p.pan.value = pan; node = node.connect(p); }
   node.connect(master);
   src.start(t, Math.random() * 0.2, dec + 0.02);
-  // now and then a link rings: a short high sine on top of the click
-  if (Math.random() < v.ping) {
-    const o = audio.createOscillator(), og = audio.createGain();
-    o.frequency.value = 1900 + Math.random() * 900;
-    og.gain.setValueAtTime(vol * 0.12, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.015 + Math.random() * 0.015);
-    o.connect(og).connect(master); o.start(t); o.stop(t + 0.13);
-  }
 }
 let soundBudget = 0;
 function chainSounds() {
@@ -290,22 +283,22 @@ function chainSounds() {
   }
   if (total <= 0) { soundBudget = 0; return; }
   // number of clicks this frame grows with the motion, softly capped
-  soundBudget += Math.min(0.45, Math.sqrt(total) * 0.1);
+  soundBudget += Math.min(1.2, Math.sqrt(total) * 0.27); // many tiny grains: a rustle, not a clock
   const pan = Math.max(-0.8, Math.min(0.8, panSum / total));
-  const vol = Math.min(0.6, 0.24 + total * 0.018);
+  const vol = Math.min(0.3, 0.12 + total * 0.009);
   const kinds = Object.keys(act);
   while (soundBudget >= 1) {
     soundBudget -= 1;
     let r = Math.random() * total, k = kinds[0];
     for (const q of kinds) { r -= act[q]; if (r <= 0) { k = q; break; } }
-    grain(k, vol * (0.5 + Math.random() * 0.6), pan + (Math.random() - 0.5) * 0.4);
+    grain(k, vol * (0.6 + Math.random() * 0.6), pan + (Math.random() - 0.5) * 0.8);
   }
 }
 let kindOf = [];
 function pickSound(i, down) {
   if (!audio || muted) return;
   const k = kindOf[i] || 'gold';
-  grain(k, down ? 0.15 : 0.1, 0);
+  for (let n = 0; n < (down ? 4 : 3); n++) grain(k, down ? 0.2 : 0.14, (Math.random() - 0.5) * 0.3); // a little shake of the chain
 }
 function chime() {
   if (!audio) return;
