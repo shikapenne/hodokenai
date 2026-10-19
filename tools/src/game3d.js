@@ -245,11 +245,11 @@ function setMuted(m) {
 // ---- chain sounds: tiny metallic clicks synthesised from what the links are doing ----
 // gold rings a little lower and warmer, silver brighter, pearls give a soft clack
 const VOICE = {
-  gold:   { lo: 2000, hi: 3800, q: 16, dec: 0.026, ping: 0.05 },
-  rose:   { lo: 1900, hi: 3600, q: 16, dec: 0.024, ping: 0.04 },
-  silver: { lo: 2500, hi: 4600, q: 18, dec: 0.03, ping: 0.06 },
-  pearl:  { lo: 900, hi: 1800, q: 6, dec: 0.012, ping: 0 },
-  kihei:  { lo: 1500, hi: 3000, q: 12, dec: 0.035, ping: 0.03 },
+  gold:   { lo: 1100, hi: 2100, q: 14, dec: 0.011, ping: 0.03 },
+  rose:   { lo: 1050, hi: 2000, q: 14, dec: 0.010, ping: 0.03 },
+  silver: { lo: 1400, hi: 2600, q: 16, dec: 0.013, ping: 0.04 },
+  pearl:  { lo: 600, hi: 1100, q: 6, dec: 0.007, ping: 0 },
+  kihei:  { lo: 800, hi: 1600, q: 12, dec: 0.016, ping: 0.02 },
 };
 function grain(kind, vol, pan) {
   const v = VOICE[kind] || VOICE.gold, t = audio.currentTime + Math.random() * 0.012;
@@ -265,8 +265,8 @@ function grain(kind, vol, pan) {
   // now and then a link rings: a short high sine on top of the click
   if (Math.random() < v.ping) {
     const o = audio.createOscillator(), og = audio.createGain();
-    o.frequency.value = 3200 + Math.random() * 1800;
-    og.gain.setValueAtTime(vol * 0.12, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.03 + Math.random() * 0.04);
+    o.frequency.value = 1900 + Math.random() * 900;
+    og.gain.setValueAtTime(vol * 0.12, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.015 + Math.random() * 0.015);
     o.connect(og).connect(master); o.start(t); o.stop(t + 0.13);
   }
 }
