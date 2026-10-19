@@ -24,10 +24,6 @@ const MU = 3.0;      // chain-on-chain friction
 let GRIP = 0.9;          // share of sliding between touching chains that is cancelled outright (rope-like grip)
 const FRIC_MAX = 0.35; // px a single contact may drag per substep: more than this and links can be pushed through each other
 let MU_TRAY = 3.0;   // chain-on-velvet friction
-// one-finger play: while a chain is held, links in the tangle away from the finger resist being dragged sideways
-// (as if a second hand held the tangle down) but still slide freely along their own length,
-// so a pulled strand snakes out through a knot instead of hauling the whole knot along
-let ANCHOR = 0.4;      // share of the sideways drift cancelled each substep
 let GROUND_KEEP = 0.85; // velocity kept per substep when lying on the tray
 
 function mulberry32(a) {
@@ -388,7 +384,6 @@ class Sim {
     this.solveConstraints(false);
     this.solveConstraints(true);
     if (this.twoPass) this.solveCollisions();
-    if (ANCHOR > 0 && this.grabs.length) this.anchor();
     this.strainLimit(false);
     this.strainLimit(true);
     this.strainLimit(false);
@@ -432,24 +427,6 @@ class Sim {
   }
   chainSeg(ci) { let s = 0; for (let k = 0; k < ci; k++) s += this.chains[k].n - 1; return s; }
   chainOf(i) { for (const c of this.chains) if (i < c.start + c.n || c.pend === i) return c; return this.chains[this.chains.length - 1]; }
-
-  anchor() {
-    const { px, py, ox, oy, held, nearHeld, gone, w, touch } = this;
-    for (const c of this.chains) {
-      const e = c.start + c.n - 1;
-      for (let i = c.start; i <= e; i++) {
-        if (!touch[i] || held[i] || nearHeld[i] || gone[i] || w[i] === 0) continue; // only links caught in the tangle
-        const a = i > c.start ? i - 1 : i, b = i < e ? i + 1 : i;
-        let tx = px[b] - px[a], ty = py[b] - py[a]; const tl = Math.hypot(tx, ty);
-        const k = ANCHOR;
-        const dx = px[i] - ox[i], dy = py[i] - oy[i];
-        if (tl < 1e-4) { px[i] -= dx * k; py[i] -= dy * k; continue; }
-        tx /= tl; ty /= tl;
-        const along = dx * tx + dy * ty, qx = dx - along * tx, qy = dy - along * ty;
-        px[i] -= qx * k; py[i] -= qy * k;
-      }
-    }
-  }
 
   markNearHeld() {
     this.nearHeld.fill(0);
@@ -516,4 +493,4 @@ class Sim {
 }
 function orient(ax, ay, bx, by, cx, cy) { return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax); }
 
-if (typeof module !== 'undefined') module.exports = { setAnchor: a => { ANCHOR = a; }, PEND_R, PEND_L, setTune: (a, b, c) => { SLIP = a; GROUND_KEEP = b; if (c !== undefined) GRAV_ACC = c; }, Sim, R, D, LIFT, mulberry32 };
+if (typeof module !== 'undefined') module.exports = { PEND_R, PEND_L, setTune: (a, b, c) => { SLIP = a; GROUND_KEEP = b; if (c !== undefined) GRAV_ACC = c; }, Sim, R, D, LIFT, mulberry32 };
