@@ -1,5 +1,5 @@
 const {Sim}=require('../src/sim.js');const fs=require('fs');
-for(const [f,ch] of [['L1',[['gold',160]]],['L2',[['gold',150],['silver',150]]],['L3',[['pearl',130],['gold',140]]],['L4',[['kihei',90],['silver',150],['rose',120]]],['L5',[['kihei',70],['gold',100],['pearl',95],['silver',100]]]]){
+for(const [f,ch] of [['L1',[['gold',160]]],['L2',[['gold',150],['silver',150]]],['L3',[['pearl',130],['gold',140]]],['L4',[['gold',120],['silver',120],['rose',120]]],['L5',[['silver',72],['gold',72],['pearl',66],['rose',72],['silver',72]]]]){
  const b=Buffer.from(fs.readFileSync('../src/levels/'+f+'.b64','utf8'),'base64');const i16=new Int16Array(b.buffer,b.byteOffset,b.length/2);
  const s=new Sim(360,640,{chains:ch.map(([kind,links])=>({kind,links}))},1,Float32Array.from(i16,v=>v/20));
  const c0=s.crossings();for(let k=0;k<1200;k++)s.step();
