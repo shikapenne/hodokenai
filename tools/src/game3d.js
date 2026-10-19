@@ -515,18 +515,17 @@ cvs.addEventListener('pointerdown', e => {
   if (state === 'menu' || pointers.size + camPts.size >= 3) return;
   const isMouse = e.pointerType === 'mouse';
   const i = state === 'play' ? pickAt(e) : -1;
-  // a touch on empty space, or a middle-button drag, moves the camera
-  if (i < 0 || (isMouse && e.button === 1)) {
-    if (pointers.size > 0) return; // holding a chain: ignore stray touches
+  // one chain at a time, with one finger (or the left button): every other touch is ignored while holding
+  if (pointers.size > 0) return;
+  // a touch on empty space, or a right/middle-button drag, moves the camera
+  if (i < 0 || camPts.size > 0 || (isMouse && e.button !== 0)) { // a second finger joins a camera gesture even over a chain
     const mode = isMouse && (e.button === 2 || e.button === 1 || e.shiftKey) ? 'orbit' : 'pan';
     camPts.set(e.pointerId, { x: e.clientX, y: e.clientY, mode });
     try { cvs.setPointerCapture(e.pointerId); } catch (err) {}
     beginGesture(); e.preventDefault(); return;
   }
-  if (camPts.size > 0) return; // mid camera gesture
-  const hold = isMouse && e.button === 2;
-  const g = sim.setGrab(i, sim.px[i], sim.py[i], hold ? R : undefined);
-  pointers.set(e.pointerId, { g, hold });
+  const g = sim.setGrab(i, sim.px[i], sim.py[i]);
+  pointers.set(e.pointerId, { g, hold: false });
   pickSound(i, true); hapticTap();
   try { cvs.setPointerCapture(e.pointerId); } catch (err) {}
   if (!started) { started = true; t0 = performance.now(); }
