@@ -3,7 +3,7 @@ const W = 560, H = 880;          // velvet: room to lay untangled chains out
 const FW = 300, FH = 500;         // area the camera frames at the start
 const OX = (360 - W) / 2, OY = (640 - H) / 2; // level data was made on a 360x640 tray
 /*LEVELS*/
-const GEMS = [0xd8344a, 0x3a6fd8, 0x2bab7a, 0xa64fd8, 0xe0a12b];
+const GEMS = [0x9e0b22, 0x0f3592, 0x0a6b43, 0x5a1d8e, 0xb86e06]; // ruby, sapphire, emerald, amethyst, topaz
 const METAL = {
   gold:   { color: 0xe0b04a, metal: 1.0, rough: 0.28 },
   silver: { color: 0xd4d9e2, metal: 1.0, rough: 0.24 },
@@ -87,7 +87,20 @@ scene.add(sun);
 let linkMeshes = [], pearlMeshes = [], extras = [];
 const linkGeo = new THREE.TorusGeometry(2.95, 1.05, 6, 14);
 const pearlGeo = new THREE.SphereGeometry(4.3, 14, 10);
-const gemGeo = new THREE.OctahedronGeometry(5.5, 0);
+// stones: each necklace gets its own cut. All lie flat, top facing up, the end that hangs away from the chain toward +Z.
+function flatExtrude(shape, depth) {
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 1.1, bevelSize: 0.9, bevelSegments: 2, curveSegments: 14 });
+  geo.center(); geo.rotateX(-Math.PI / 2); geo.computeVertexNormals(); return geo;
+}
+const GEM_GEOS = {
+  heart: (() => { const h = new THREE.Shape(); h.moveTo(0, -5.6); h.bezierCurveTo(-7.5, -0.6, -4, 5.2, 0, 2.4); h.bezierCurveTo(4, 5.2, 7.5, -0.6, 0, -5.6); return flatExtrude(h, 1.6); })(),
+  drop: (() => { const d = new THREE.Shape(); d.moveTo(0, 6); d.bezierCurveTo(1.4, 3, 4.4, 0.6, 4.4, -1.6); d.absarc(0, -1.6, 4.4, 0, Math.PI, true); d.bezierCurveTo(-4.4, 0.6, -1.4, 3, 0, 6); return flatExtrude(d, 1.6); })(),
+  square: (() => { const q = new THREE.Shape(), a = 3.6, r = 1.2; q.moveTo(-a + r, -a); q.lineTo(a - r, -a); q.quadraticCurveTo(a, -a, a, -a + r); q.lineTo(a, a - r); q.quadraticCurveTo(a, a, a - r, a); q.lineTo(-a + r, a); q.quadraticCurveTo(-a, a, -a, a - r); q.lineTo(-a, -a + r); q.quadraticCurveTo(-a, -a, -a + r, -a); return flatExtrude(q, 1.6); })(),
+  round: (() => { const g = new THREE.LatheGeometry([new THREE.Vector2(0, -2.6), new THREE.Vector2(5.2, 0.2), new THREE.Vector2(5.0, 0.9), new THREE.Vector2(3.2, 2.2), new THREE.Vector2(0, 2.2)], 12); g.computeVertexNormals(); return g; })(),
+  oval: (() => { const g = new THREE.LatheGeometry([new THREE.Vector2(0, -2.2), new THREE.Vector2(4.4, 0.2), new THREE.Vector2(4.2, 0.8), new THREE.Vector2(2.6, 2.0), new THREE.Vector2(0, 2.0)], 12); g.scale(0.8, 1, 1.25); g.computeVertexNormals(); return g; })(),
+};
+const GEM_CUTS = ['heart', 'round', 'drop', 'square', 'oval'];
+const bailGeo = new THREE.TorusGeometry(2.2, 0.7, 6, 14);
 const claspGeo = new THREE.TorusGeometry(4.2, 1.5, 8, 18);
 const ringGeo = new THREE.TorusGeometry(3.8, 1.1, 6, 16);
 const matCache = {};
@@ -114,8 +127,12 @@ function buildChains() {
       const m = new THREE.InstancedMesh(linkGeo, metalMat(c.kind), nSeg);
       m.castShadow = m.receiveShadow = true; m.userData = { chain: c }; scene.add(m); linkMeshes.push(m);
     }
-    const gem = new THREE.Mesh(gemGeo, new THREE.MeshStandardMaterial({ color: GEMS[ci % GEMS.length], metalness: 0.1, roughness: 0.05, envMapIntensity: 2 }));
-    gem.castShadow = true; gem.userData = { at: c.start + (c.n >> 1), chain: c }; scene.add(gem); extras.push(gem);
+    // pendant hanging from the middle of the chain on a small bail
+    const cut = GEM_CUTS[ci % GEM_CUTS.length];
+    const gem = new THREE.Mesh(GEM_GEOS[cut], new THREE.MeshStandardMaterial({ color: GEMS[ci % GEMS.length], metalness: 0.35, roughness: 0.12, envMapIntensity: 1.3, emissive: GEMS[ci % GEMS.length], emissiveIntensity: 0.12, flatShading: cut === 'round' || cut === 'oval' }));
+    gem.scale.setScalar(1.2); gem.castShadow = true; gem.userData = { at: c.start + (c.n >> 1), chain: c, hang: 10 }; scene.add(gem); extras.push(gem);
+    const bail = new THREE.Mesh(bailGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); bail.castShadow = true;
+    bail.userData = { at: c.start + (c.n >> 1), chain: c, hang: 3.2, bail: true }; scene.add(bail); extras.push(bail);
     const clasp = new THREE.Mesh(claspGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); clasp.castShadow = true;
     clasp.userData = { at: c.start, next: c.start + 1, chain: c }; scene.add(clasp); extras.push(clasp);
     const ring = new THREE.Mesh(ringGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); ring.castShadow = true;
@@ -134,6 +151,7 @@ function basisAlong(ax, ay, az, bx, by, bz, standing) {
   if (standing) _m.makeBasis(_x, _y, _z); else { _y.negate(); _m.makeBasis(_x, _z, _y); }
   return l;
 }
+const c0 = e => e.userData.chain.start, c1 = e => e.userData.chain.start + e.userData.chain.n - 1;
 function syncChains() {
   const { px, py, pz, sa, sb } = sim;
   for (const m of linkMeshes) {
@@ -166,8 +184,13 @@ function syncChains() {
       const dx = px[i] - px[j], dy = py[i] - py[j], l = Math.hypot(dx, dy) || 1;
       e.position.set(px[i] + dx / l * 4 - W / 2, pz[i], py[i] + dy / l * 4 - H / 2);
     } else {
-      e.position.set(px[i] - W / 2, pz[i] + 3, py[i] - H / 2);
-      e.rotation.set(Math.PI / 2, 0, 0); e.scale.set(1, 0.55, 1);
+      // pendant: lies beside the chain, pointing away from it
+      const a = Math.max(c0(e), i - 1), b = Math.min(c1(e), i + 1);
+      let dx = px[b] - px[a], dy = py[b] - py[a]; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+      const nx = -dy, ny = dx, h = e.userData.hang;
+      e.position.set(px[i] + nx * h - W / 2, Math.max(R * 0.5, pz[i] - 1.5) + (e.userData.bail ? 1.2 : 0), py[i] + ny * h - H / 2);
+      if (e.userData.bail) e.rotation.set(0, Math.atan2(dx, dy), 0);
+      else e.rotation.set(0, Math.atan2(nx, ny), 0);
     }
   }
 }
