@@ -285,7 +285,7 @@ function chainSounds() {
   // number of clicks this frame grows with the motion, softly capped
   soundBudget += Math.min(1.2, Math.sqrt(total) * 0.27); // many tiny grains: a rustle, not a clock
   const pan = Math.max(-0.8, Math.min(0.8, panSum / total));
-  const vol = Math.min(0.3, 0.12 + total * 0.009);
+  const vol = Math.min(0.2, 0.08 + total * 0.006);
   const kinds = Object.keys(act);
   while (soundBudget >= 1) {
     soundBudget -= 1;
@@ -298,7 +298,7 @@ let kindOf = [];
 function pickSound(i, down) {
   if (!audio || muted) return;
   const k = kindOf[i] || 'gold';
-  for (let n = 0; n < (down ? 4 : 3); n++) grain(k, down ? 0.2 : 0.14, (Math.random() - 0.5) * 0.3); // a little shake of the chain
+  for (let n = 0; n < (down ? 4 : 3); n++) grain(k, down ? 0.133 : 0.093, (Math.random() - 0.5) * 0.3); // a little shake of the chain
 }
 function chime() {
   if (!audio) return;
