@@ -95,6 +95,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .res { font-size: 14px; color: var(--muted); line-height: 1.8; font-variant-numeric: tabular-nums; }
 .res b { color: var(--ivory); font-size: 22px; font-weight: 700; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.menu-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.subtitle { font-size: 12px; letter-spacing: 0.12em; color: var(--brass); margin-top: -8px; }
+.lang-pick { display: grid; gap: 3px; font-size: 10px; letter-spacing: 0.1em; color: var(--muted); flex-shrink: 0; margin-top: 6px; }
+.lang-pick select { font: inherit; font-size: 13px; letter-spacing: 0; color: var(--ivory); background: rgba(23,18,42,0.85); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+.lang-pick select:focus-visible { outline: 2px solid var(--brass); outline-offset: 1px; }
+/* Chinese and Korean use the phone's own fonts: the bundled Japanese faces don't cover them */
+:root[lang|="zh"] { --f-display: "Songti SC", "Noto Serif CJK SC", "Noto Serif SC", serif; --f-body: "PingFang SC", "PingFang TC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif; }
+:root[lang="ko"] { --f-display: "AppleMyungjo", "Noto Serif KR", "Noto Serif CJK KR", serif; --f-body: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif; }
 .rank-box { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
 .name-row { display: grid; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .name-input { display: flex; gap: 8px; }
@@ -119,13 +127,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 <div class="ad-gap" aria-hidden="true"></div>
 <div id="app">
-  <canvas id="c" aria-label="絡まったネックレスのトレイ"></canvas>
+  <canvas id="c" data-i18n-aria="tray" aria-label="絡まったネックレスのトレイ"></canvas>
   <div class="topbar">
     <div class="hud">
-      <div class="lvl-wrap"><button class="pausebtn" id="pauseBtn" type="button" aria-label="ポーズ"><span></span><span></span></button><div class="lvl" id="lvlName">ほどけない<small>LEVEL 1</small></div><button class="snd" id="viewBtn" type="button">視点を戻す</button></div>
+      <div class="lvl-wrap"><button class="pausebtn" id="pauseBtn" type="button" data-i18n-aria="pause" aria-label="ポーズ"><span></span><span></span></button><div class="lvl" id="lvlName">ほどけない<small>LEVEL 1</small></div><button class="snd" id="viewBtn" type="button" data-i18n="view">視点を戻す</button></div>
       <div class="stats">
-        <div class="stat" id="crossBox"><b id="cross">–</b><span>交差</span></div>
-        <div class="stat"><b id="time">0:00.0</b><span>時間</span></div>
+        <div class="stat" id="crossBox"><b id="cross">–</b><span data-i18n="cross">交差</span></div>
+        <div class="stat"><b id="time">0:00.0</b><span data-i18n="time">時間</span></div>
       </div>
     </div>
   </div>
@@ -133,55 +141,51 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
   <div class="overlay" id="menu">
     <div class="card">
-      <div class="title">ほどけない</div>
-      <p class="lead">引き出しの奥で絡まったネックレスを、ほどくゲームです。結び目は、焦って引くほど固く締まります。</p>
+      <div class="menu-top"><div class="title">ほどけない</div><label class="lang-pick"><span data-i18n="lang">言語</span><select id="langSel"></select></label></div>
+      <div class="subtitle" data-i18n="sub">絡まったネックレスをほどくパズル</div>
+      <p class="lead" data-i18n="lead">引き出しの奥で絡まったネックレスを、ほどくゲームです。結び目は、焦って引くほど固く締まります。</p>
       <div class="levels" id="levels"></div>
-      <button class="btn" id="boardBtn" type="button" hidden>ランキングを見る</button>
-      <div class="rules">
-        <div><b>つまむ</b>　鎖をタッチ（左クリック）して引く。0.3秒かけて持ち上がり、ほかの鎖の上を越えられます。</div>
-        <div><b>押さえる</b>　鎖を二本指で、片方で押さえてもう片方で引く。PCは右クリックで押さえる。</div>
-        <div><b>視点</b>　何もない所を指でなぞると移動。二本指でピンチすると拡大縮小、ひねると回転、そろえて上下になぞると傾き。PCはホイールで拡大、右ドラッグで回転と傾き。</div>
-        <div><b>ゴール</b>　ほかの鎖とも自分自身とも交差しなくなったネックレスは、光って消えます。全部消せばクリア。広いベルベットに並べて広げるのがコツ。</div>
-      </div>
+      <button class="btn" id="boardBtn" type="button" hidden data-i18n="board">ランキングを見る</button>
+      <div class="rules" id="rules"></div>
     </div>
   </div>
 
   <div class="overlay" id="pause" hidden>
     <div class="card pause-card">
-      <div class="big">ポーズ</div>
+      <div class="big" data-i18n="pause">ポーズ</div>
       <div class="pause-list">
-        <button class="btn primary" id="resumeBtn" type="button">つづける</button>
+        <button class="btn primary" id="resumeBtn" type="button" data-i18n="resume">つづける</button>
         <button class="btn" id="soundBtn" type="button" aria-pressed="true">音 オン</button>
-        <button class="btn" id="retryBtn" type="button">最初から</button>
-        <button class="btn" id="menuBtn" type="button">レベル選択</button>
+        <button class="btn" id="retryBtn" type="button" data-i18n="retry">最初から</button>
+        <button class="btn" id="menuBtn" type="button" data-i18n="levels">レベル選択</button>
       </div>
     </div>
   </div>
 
   <div class="overlay" id="board" hidden>
     <div class="card board-card">
-      <div class="big">ランキング</div>
+      <div class="big" data-i18n="ranking">ランキング</div>
       <div class="tabs" id="boardTabs" role="tablist"></div>
       <ol class="board-list" id="boardList"></ol>
-      <button class="btn" id="boardClose" type="button">閉じる</button>
+      <button class="btn" id="boardClose" type="button" data-i18n="close">閉じる</button>
     </div>
   </div>
 
   <div class="overlay" id="win" hidden>
     <div class="card">
-      <div class="big">ほどけた</div>
+      <div class="big" data-i18n="cleared">ほどけた</div>
       <div class="res" id="winRes"></div>
       <div class="rank-box" id="rankBox" hidden>
         <form class="name-row" id="nameForm" hidden>
-          <label for="nameInput">ランキングに載せる名前</label>
-          <div class="name-input"><input id="nameInput" maxlength="12" autocomplete="nickname" placeholder="12文字まで"><button class="btn primary" type="submit">登録</button></div>
+          <label for="nameInput" data-i18n="nameLabel">ランキングに載せる名前</label>
+          <div class="name-input"><input id="nameInput" maxlength="12" autocomplete="nickname" placeholder="12文字まで" data-i18n-ph="namePh"><button class="btn primary" type="submit" data-i18n="register">登録</button></div>
         </form>
         <div class="rank-line" id="rankLine"></div>
       </div>
       <div class="row">
-        <button class="btn primary" id="nextBtn" type="button">次のレベル</button>
-        <button class="btn" id="winMenu" type="button">レベル選択</button>
-        <button class="btn x" id="shareBtn" type="button">Xにポスト</button>
+        <button class="btn primary" id="nextBtn" type="button" data-i18n="next">次のレベル</button>
+        <button class="btn" id="winMenu" type="button" data-i18n="levels">レベル選択</button>
+        <button class="btn x" id="shareBtn" type="button" data-i18n="post">Xにポスト</button>
       </div>
     </div>
   </div>

@@ -244,7 +244,7 @@ function unlockAudio() {
 function setMuted(m) {
   muted = m; try { localStorage.setItem('hodoke-muted', m ? '1' : '0'); } catch (e) {}
   if (master) master.gain.value = m ? 0 : 1;
-  $('soundBtn').textContent = m ? '音 オフ' : '音 オン';
+  $('soundBtn').textContent = m ? t('soundOff') : t('soundOn');
   $('soundBtn').setAttribute('aria-pressed', String(!m));
 }
 
@@ -564,7 +564,8 @@ function buildLevels() {
     const b = bestOf(i);
     const el = document.createElement('button');
     el.type = 'button'; el.className = 'lv';
-    el.innerHTML = `<span class="no">${i + 1}</span><span><div class="nm">${L.name}</div><div class="ds">${L.desc}</div></span><span class="bt ${b ? 'done' : ''}">${b ? '最速 ' + fmt(b) : '未クリア'}</span>`;
+    const [nm, ds] = levelText(L.id);
+    el.innerHTML = `<span class="no">${i + 1}</span><span><div class="nm">${nm}</div><div class="ds">${ds}</div></span><span class="bt ${b ? 'done' : ''}">${b ? t('fastest', fmt(b)) : t('notCleared')}</span>`;
     el.onclick = () => start(i);
     box.appendChild(el);
   });
@@ -572,10 +573,10 @@ function buildLevels() {
 function start(i) {
   level = i; sim = makeSim(LEVELS[i]); buildChains(); pointers.clear(); camPts.clear(); gest = null; resetView();
   state = 'play'; frame = 0; started = false; elapsed = 0;
-  $('lvlName').innerHTML = `${LEVELS[i].name}<small>LEVEL ${i + 1}</small>`;
+  $('lvlName').innerHTML = `${levelText(LEVELS[i].id)[0]}<small>LEVEL ${i + 1}</small>`;
   $('menu').hidden = true; $('win').hidden = true; $('pause').hidden = true; $('time').textContent = '0:00.0';
   crossings = sim.crossings(); $('cross').textContent = crossings;
-  showToast('結び目は、引くほど締まります', 2600);
+  showToast(t('toastStart'), 2600);
 }
 let toastTimer;
 function showToast(t, ms = 2200) { const el = $('toast'); el.textContent = t; el.style.opacity = 1; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.opacity = 0, ms); }
@@ -618,21 +619,21 @@ function checkFree() {
       if (c.freeFrames >= 36) {
         vanish(ci);
         const remain = sim.chains.filter(q => !q.removed).length;
-        if (remain > 0) showToast(`ほどけた！　あと ${remain} 本`, 1800);
+        if (remain > 0) showToast(t('toastFreed', remain), 1800);
       } else left++;
     }
     seg += n;
   });
-  if (left === 0 && state === 'play') { state = 'clearing'; showToast('ぜんぶ、ほどけた', 1600); setTimeout(win, 1500); }
+  if (left === 0 && state === 'play') { state = 'clearing'; showToast(t('toastAll'), 1600); setTimeout(win, 1500); }
 }
 let lastResult = null; // { id, name, ms, rank, total }
 function win() {
   state = 'over';
   const prev = bestOf(level), isBest = !prev || elapsed < prev;
   if (isBest) store('hodoke3-best-' + level, String(Math.round(elapsed)));
-  $('winRes').innerHTML = `<b>${fmt(elapsed)}</b>${isBest ? '　自己ベスト' : '　最速 ' + fmt(prev)}<br>${LEVELS[level].name}をほどきました。`;
+  $('winRes').innerHTML = `<b>${fmt(elapsed)}</b>　${isBest ? t('newBest') : t('fastest', fmt(prev))}<br>${t('untangled', levelText(LEVELS[level].id)[0])}`;
   $('nextBtn').hidden = level >= LEVELS.length - 1;
-  lastResult = { id: LEVELS[level].id, name: LEVELS[level].name, ms: Math.round(elapsed) };
+  lastResult = { id: LEVELS[level].id, ms: Math.round(elapsed) };
   $('win').hidden = false;
   showRankingAfterWin();
 }
@@ -655,7 +656,7 @@ async function api(path, opts = {}) {
     ...opts,
     headers: { apikey: RANKING.anonKey, Authorization: 'Bearer ' + RANKING.anonKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
-  if (!res.ok) throw new Error('ranking ' + res.status);
+  if (!res.ok) throw new Error('ranking ' + res.status + ' ' + (await res.text().catch(() => '')));
   return res.json();
 }
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -664,24 +665,31 @@ function showRankingAfterWin() {
   if (!rankingOn()) { box.hidden = true; return; }
   box.hidden = false; line.textContent = '';
   const name = store('hodoke-name');
-  if (!name) { $('nameForm').hidden = false; $('nameInput').value = ''; line.textContent = '名前を入れると全国ランキングに載ります。'; return; }
+  if (!name) { $('nameForm').hidden = false; $('nameInput').value = ''; line.textContent = t('rankPrompt'); return; }
   $('nameForm').hidden = true; submitScore(name);
 }
+function askNameAgain() {
+  try { localStorage.removeItem('hodoke-name'); } catch (e) {}
+  $('nameForm').hidden = false; $('nameInput').value = ''; $('rankLine').textContent = t('nameRejected');
+}
 async function submitScore(name) {
+  if (!nameAllowed(name)) { askNameAgain(); return; }
   const line = $('rankLine'), r = lastResult; if (!r) return;
-  line.textContent = 'ランキングに登録しています…';
+  line.textContent = t('rankSending');
   try {
     const out = await api('rpc/submit_score', { method: 'POST', body: JSON.stringify({ p_level: r.id, p_player: playerId(), p_name: name, p_ms: r.ms }) });
     r.rank = out.rank; r.total = out.total;
-    line.innerHTML = `全国 <b>${out.rank}</b> 位 ／ ${out.total} 人中` + (out.best < r.ms ? `<br>（あなたのベスト ${fmt(out.best)} の順位）` : '');
+    line.innerHTML = t('rankResult', out.rank, out.total) + (out.best < r.ms ? '<br>' + t('rankBestNote', fmt(out.best)) : '');
   } catch (e) {
-    line.textContent = 'ランキングに接続できませんでした。電波のよい所で、もう一度クリアすると登録されます。';
+    if (/name_rejected/.test(e.message)) { askNameAgain(); return; }
+    line.textContent = t('rankError');
   }
 }
 $('nameForm').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('nameInput').value.replace(/\s+/g, ' ').trim().slice(0, 12);
   if (!name) { $('nameInput').focus(); return; }
+  if (!nameAllowed(name)) { $('rankLine').textContent = t('nameRejected'); $('nameInput').select(); return; }
   store('hodoke-name', name); $('nameForm').hidden = true; submitScore(name);
 });
 // leaderboard screen
@@ -689,14 +697,14 @@ let boardLevel = 0;
 async function openBoard(i) {
   boardLevel = i; $('board').hidden = false;
   const tabs = $('boardTabs'); tabs.innerHTML = '';
-  LEVELS.forEach((L, k) => { const b = document.createElement('button'); b.type = 'button'; b.role = 'tab'; b.textContent = L.name; b.setAttribute('aria-selected', String(k === i)); b.onclick = () => openBoard(k); tabs.appendChild(b); });
-  const list = $('boardList'); list.innerHTML = '<li class="empty">読み込み中…</li>';
+  LEVELS.forEach((L, k) => { const b = document.createElement('button'); b.type = 'button'; b.role = 'tab'; b.textContent = levelText(L.id)[0]; b.setAttribute('aria-selected', String(k === i)); b.onclick = () => openBoard(k); tabs.appendChild(b); });
+  const list = $('boardList'); list.innerHTML = `<li class="empty">${t('loading')}</li>`;
   try {
     const rows = await api(`scores?select=name,ms,player&level=eq.${LEVELS[i].id}&order=ms.asc,updated_at.asc&limit=50`);
     if (boardLevel !== i) return;
     const me = store('hodoke-player');
-    list.innerHTML = rows.length ? rows.map((r, k) => `<li class="${r.player === me ? 'me' : ''}"><span class="pos">${k + 1}</span><span class="nm">${esc(r.name)}</span><span>${fmt(r.ms)}</span></li>`).join('') : '<li class="empty">まだ記録がありません。最初の一人になれます。</li>';
-  } catch (e) { list.innerHTML = '<li class="empty">ランキングに接続できませんでした。</li>'; }
+    list.innerHTML = rows.length ? rows.map((r, k) => `<li class="${r.player === me ? 'me' : ''}"><span class="pos">${k + 1}</span><span class="nm">${esc(nameAllowed(r.name) ? r.name : '＊＊＊')}</span><span>${fmt(r.ms)}</span></li>`).join('') : `<li class="empty">${t('boardEmpty')}</li>`;
+  } catch (e) { list.innerHTML = `<li class="empty">${t('boardError')}</li>`; }
 }
 $('boardBtn').onclick = () => openBoard(level);
 $('boardClose').onclick = () => { $('board').hidden = true; };
@@ -705,9 +713,9 @@ $('boardBtn').hidden = !rankingOn();
 // ---------- post to X ----------
 $('shareBtn').onclick = () => {
   const r = lastResult; if (!r) return;
-  let text = `絡まったネックレスをほどくゲーム「ほどけない」\n${r.name}を ${fmt(r.ms)} でほどいた`;
-  if (r.rank) text += `（全国 ${r.rank} 位／${r.total} 人中）`;
-  text += '\n#ほどけない';
+  let text = t('shareText', levelText(r.id)[0], fmt(r.ms));
+  if (r.rank) text += t('shareRank', r.rank, r.total);
+  text += '\n' + t('tags');
   const url = 'https://x.com/intent/post?text=' + encodeURIComponent(text) + (STORE_URL ? '&url=' + encodeURIComponent(STORE_URL) : '');
   // opens the X app if installed, otherwise the browser; the game stays where it was
   const w = window.open(url, '_blank', 'noopener');
@@ -788,6 +796,27 @@ async function startAds() {
     setAdSpace(0);
   }
 }
+
+// ---------- language ----------
+const isTouchApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+  const pc = !isTouchApp() && window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
+  $('rules').innerHTML = t(pc ? 'rulesPC' : 'rulesTouch');
+  $('soundBtn').textContent = muted ? t('soundOff') : t('soundOn');
+  if (sim && state !== 'menu' && LEVELS[level]) $('lvlName').innerHTML = `${levelText(LEVELS[level].id)[0]}<small>LEVEL ${level + 1}</small>`;
+  buildLevels();
+}
+(() => {
+  const sel = $('langSel'); sel.innerHTML = '';
+  for (const [code, label] of Object.entries(LANG_NAMES)) { const o = document.createElement('option'); o.value = code; o.textContent = label; sel.appendChild(o); }
+  sel.value = LANG;
+  sel.onchange = () => { LANG = sel.value; try { localStorage.setItem('hodoke-lang', LANG); } catch (e) {} applyLang(); };
+})();
+applyLang();
 
 buildLevels(); resize();
 setTimeout(startAds, 400);

@@ -25,9 +25,25 @@ def levels_js():
             json.dumps(L['chains']), pos))
     return 'const LEVELS = [\n' + ',\n'.join(items) + '\n];'
 
+def write_server_sql(ng):
+    """server/supabase.sql = schema + the same banned-word list the game uses"""
+    base = open(os.path.join(ROOT, 'server', 'schema.sql'), encoding='utf-8').read()
+    q = lambda w: "'" + w.replace("'", "''") + "'"
+    rows = ',\n  '.join(f"({q(w)}, false)" for w in ng['contains']) + ',\n  ' + ',\n  '.join(f"({q(w)}, true)" for w in ng['exact'])
+    words = f"""
+-- banned words (generated from tools/src/ngwords.json; re-run this whole file after editing that list)
+delete from public.ng_words;
+insert into public.ng_words (word, exact) values
+  {rows};
+"""
+    open(os.path.join(ROOT, 'server', 'supabase.sql'), 'w', encoding='utf-8').write(base + words)
+
 def page_body():
     t = read('template3d.html')
-    game = read('game3d.js').replace('/*LEVELS*/', levels_js())
+    ng = json.load(open(os.path.join(SRC, 'ngwords.json'), encoding='utf-8'))
+    ngjs = 'const NG_WORDS = ' + json.dumps({'contains': ng['contains'], 'exact': ng['exact']}, ensure_ascii=False) + ';'
+    game = read('i18n.js').replace('/*NGWORDS*/', ngjs) + '\n' + read('game3d.js').replace('/*LEVELS*/', levels_js())
+    write_server_sql(ng)
     return t.replace('/*SIM*/', read('sim.js')).replace('/*GAME*/', game)
 
 APP_CSS = """
@@ -37,7 +53,7 @@ html, body { touch-action: none; -webkit-touch-callout: none; overscroll-behavio
 .overlay { padding-top: calc(20px + env(safe-area-inset-top, 0px)); padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
 """
 
-APP_RULES = """      <div class="rules">
+APP_RULES = """      <div class="rules" id="rules">
         <div><b>つまむ</b>　鎖に触れて、そのまま引く。つまんだ所はふわっと持ち上がり、ほかの鎖の上を越えられます。</div>
         <div><b>押さえる</b>　鎖を二本の指で。片方で押さえて、もう片方で引く。</div>
         <div><b>視点</b>　何もない所をなぞると移動。二本指でピンチすると拡大縮小、ひねると回転、そろえて上下になぞると傾き。</div>
