@@ -1,0 +1,11 @@
+{
+  "appId": "jp.shikapenne.hodokenai",
+  "appName": "ほどけない",
+  "webDir": "www",
+  "backgroundColor": "#120e22",
+  "android": { "backgroundColor": "#120e22" },
+  "ios": { "backgroundColor": "#120e22", "contentInset": "never", "scrollEnabled": false },
+  "plugins": {
+    "StatusBar": { "overlaysWebView": true, "style": "DARK", "backgroundColor": "#00000000" }
+  }
+}

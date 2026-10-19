@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ほどけない</string>
+    <string name="title_activity_main">ほどけない</string>
+    <string name="package_name">jp.shikapenne.hodokenai</string>
+    <string name="custom_url_scheme">jp.shikapenne.hodokenai</string>
+</resources>

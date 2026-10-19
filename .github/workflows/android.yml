@@ -1,0 +1,68 @@
+name: Android build
+
+# Runs on every push to main, or by hand from the Actions tab.
+# Always makes a debug APK you can install on your phone.
+# If the signing secrets are set, it also makes a signed AAB for Google Play.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          npm ci
+          pip install fonttools brotli
+
+      - name: Build game bundle and copy it into the Android project
+        run: |
+          npm run build:web
+          npx cap sync android
+
+      - name: Debug APK (install directly on a phone)
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hodokenai-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+
+      - name: Signed AAB for Google Play
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        working-directory: android
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.keystore" ./gradlew bundleRelease
+
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_KEYSTORE == 'true'
+        with:
+          name: hodokenai-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab

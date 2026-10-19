@@ -1,0 +1,28 @@
+name: iOS compile check
+
+# Checks that the iOS project builds (unsigned) on a Mac runner.
+# Making the App Store build itself needs your Apple certificates; see README.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          npm ci
+          pip install fonttools brotli
+          npm run build:web
+          npx cap sync ios
+      - name: Build for simulator (no signing)
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build

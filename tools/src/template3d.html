@@ -1,0 +1,140 @@
+<title>ほどけない</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-screen game. Velvet jewelry tray fills the screen, HUD floats top, controls bottom. Single dark look by design. */
+:root {
+  --velvet: #17122a;
+  --velvet-hi: #2b2148;
+  --brass: #d1ab55;
+  --ivory: #f1e8d8;
+  --muted: #a397bd;
+  --danger: #ec5f4f;
+  --panel: rgba(18, 13, 33, 0.9);
+  --line: rgba(209, 171, 85, 0.28);
+  --f-display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --f-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--velvet); color: var(--ivory); font-family: var(--f-body);
+  overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#app { position: relative; height: 100%; }
+[hidden] { display: none !important; }
+#c { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+
+.hud {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 2; pointer-events: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.lvl-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.snd { pointer-events: auto; font-size: 11px; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--line); background: rgba(23,18,42,0.75); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+.snd:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.lvl { font-family: var(--f-display); font-weight: 800; font-size: 17px; letter-spacing: 0.04em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvl small { display: block; font-family: var(--f-body); font-weight: 500; font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
+.stats { display: flex; gap: 14px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.stat { text-align: right; }
+.stat b { display: block; font-size: 18px; font-weight: 700; line-height: 1.1; }
+.stat span { font-size: 10px; color: var(--muted); letter-spacing: 0.12em; }
+.stat.zero b { color: var(--brass); }
+
+
+.bar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; justify-content: space-between; gap: 10px;
+  padding-top: 10px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+.btn {
+  border: 1px solid var(--line); background: rgba(23,18,42,0.75); border-radius: 999px;
+  padding: 9px 18px; font-size: 14px; font-weight: 500; letter-spacing: 0.05em;
+}
+.btn:hover { border-color: var(--brass); }
+.btn:focus-visible, .lv:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.btn.primary { background: var(--brass); color: #1a1326; border-color: var(--brass); font-weight: 700; }
+
+.overlay {
+  position: absolute; inset: 0; z-index: 5; display: grid; place-items: center;
+  background: rgba(12, 9, 22, 0.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  padding-block: 20px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  overflow-y: auto;
+}
+.card { width: min(400px, 100%); display: grid; gap: 16px; }
+.title { font-family: var(--f-display); font-weight: 800; font-size: clamp(40px, 12vw, 56px); letter-spacing: 0.06em; line-height: 1; text-wrap: balance; }
+.lead { font-size: 14px; line-height: 1.8; color: var(--ivory); opacity: .9; }
+.rules { display: grid; gap: 6px; font-size: 12.5px; line-height: 1.6; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+.rules b { color: var(--ivory); font-weight: 500; }
+.levels { display: grid; gap: 8px; }
+.lv {
+  display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 12px; text-align: left;
+  border: 1px solid var(--line); border-radius: 10px; background: rgba(43,33,72,0.55); padding: 10px 14px;
+}
+.lv:hover { border-color: var(--brass); }
+.lv .no { font-family: var(--f-display); font-size: 22px; font-weight: 800; color: var(--brass); }
+.lv .nm { font-weight: 700; font-size: 15px; }
+.lv .ds { font-size: 11.5px; color: var(--muted); }
+.lv .bt { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.lv .bt.done { color: var(--brass); }
+.big { font-family: var(--f-display); font-weight: 800; font-size: 44px; letter-spacing: 0.08em; }
+.res { font-size: 14px; color: var(--muted); line-height: 1.8; font-variant-numeric: tabular-nums; }
+.res b { color: var(--ivory); font-size: 22px; font-weight: 700; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.toast { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); z-index: 3; font-size: 13px; color: var(--muted); pointer-events: none; transition: opacity .6s; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+
+<div id="app">
+  <canvas id="c" aria-label="絡まったネックレスのトレイ"></canvas>
+  <div class="hud">
+    <div class="lvl-wrap"><div class="lvl" id="lvlName">ほどけない<small>LEVEL 1</small></div><button class="snd" id="soundBtn" type="button" aria-pressed="true">音 オン</button></div>
+    <div class="stats">
+      <div class="stat" id="crossBox"><b id="cross">–</b><span>交差</span></div>
+      <div class="stat"><b id="time">0:00.0</b><span>時間</span></div>
+    </div>
+  </div>
+  <div class="toast" id="toast">鎖をつまんで引いてみてください</div>
+  <div class="bar">
+    <button class="btn" id="menuBtn" type="button">レベル選択</button>
+    <button class="btn" id="viewBtn" type="button">視点を戻す</button>
+    <button class="btn" id="retryBtn" type="button">最初から</button>
+  </div>
+
+  <div class="overlay" id="menu">
+    <div class="card">
+      <div class="title">ほどけない</div>
+      <p class="lead">引き出しの奥で絡まったネックレスを、ほどくゲームです。結び目は、焦って引くほど固く締まります。</p>
+      <div class="levels" id="levels"></div>
+      <div class="rules">
+        <div><b>つまむ</b>　鎖をタッチ（左クリック）して引く。0.3秒かけて持ち上がり、ほかの鎖の上を越えられます。</div>
+        <div><b>押さえる</b>　鎖を二本指で、片方で押さえてもう片方で引く。PCは右クリックで押さえる。</div>
+        <div><b>視点</b>　何もない所を指でなぞると移動。二本指でピンチすると拡大縮小、ひねると回転、そろえて上下になぞると傾き。PCはホイールで拡大、右ドラッグで回転と傾き。</div>
+        <div><b>ゴール</b>　ほかの鎖とも自分自身とも交差しなくなったネックレスは、光って消えます。全部消せばクリア。広いベルベットに並べて広げるのがコツ。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="win" hidden>
+    <div class="card">
+      <div class="big">ほどけた</div>
+      <div class="res" id="winRes"></div>
+      <div class="row">
+        <button class="btn primary" id="nextBtn" type="button">次のレベル</button>
+        <button class="btn" id="winMenu" type="button">レベル選択</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*SIM*/
+
+/*GAME*/
+</script>
