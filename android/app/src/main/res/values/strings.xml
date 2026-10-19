@@ -4,4 +4,6 @@
     <string name="title_activity_main">ほどけない</string>
     <string name="package_name">jp.shikapenne.hodokenai</string>
     <string name="custom_url_scheme">jp.shikapenne.hodokenai</string>
+    <!-- AdMob アプリID（今は Google のテスト用。本番IDに差し替える） -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

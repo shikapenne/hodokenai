@@ -396,8 +396,8 @@ function resize() {
   const r = cvs.getBoundingClientRect();
   renderer.setSize(r.width, r.height, false);
   camera.aspect = r.width / r.height;
-  const hud = document.querySelector('.hud').getBoundingClientRect(), bar = document.querySelector('.bar').getBoundingClientRect();
-  const top = Math.max(40, hud.bottom - r.top), bottom = Math.max(50, r.bottom - bar.top), usable = (r.height - top - bottom) / r.height;
+  const tb = document.querySelector('.topbar').getBoundingClientRect();
+  const top = Math.max(40, tb.bottom - r.top), bottom = 20, usable = (r.height - top - bottom) / r.height;
   const tf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   const needV = (FH / 2 + 24) / (tf * usable), needH = (FW / 2 + 18) / (tf * camera.aspect);
   const fit = Math.max(needV, needH) * 1.04 + 40;
@@ -643,6 +643,42 @@ document.addEventListener('visibilitychange', () => {
 // status bar: light text over the dark velvet, drawn over the page
 try { const sb = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar; if (sb) { sb.setStyle({ style: 'DARK' }); sb.setOverlaysWebView({ overlay: true }); } } catch (e) {}
 
+// ---------- banner ad (app only) ----------
+// IDs below are Google's public TEST units. Replace with your own from AdMob before release
+// (and set testing to false). See README "広告".
+const ADS = {
+  testing: true,
+  android: 'ca-app-pub-3940256099942544/9214589741',
+  ios: 'ca-app-pub-3940256099942544/2435281174',
+};
+function setAdSpace(h) {
+  // reserve the banner's height plus a gap, so no button or chain sits right next to the ad
+  document.documentElement.style.setProperty('--ad-h', h > 0 ? `calc(${Math.ceil(h)}px + 24px + env(safe-area-inset-bottom, 0px))` : '0px');
+  requestAnimationFrame(resize);
+}
+async function startAds() {
+  const cap = window.Capacitor, AdMob = cap && cap.Plugins && cap.Plugins.AdMob;
+  if (!AdMob || !cap.isNativePlatform || !cap.isNativePlatform()) return;
+  const platform = cap.getPlatform();
+  setAdSpace(56); // typical adaptive banner height; corrected once the ad reports its size
+  try {
+    // privacy first: consent form where the law needs one (EU etc.), then Apple's tracking prompt
+    const info = await AdMob.requestConsentInfo();
+    if (info.isConsentFormAvailable && info.status === 'REQUIRED') await AdMob.showConsentForm();
+    if (platform === 'ios') {
+      const t = await AdMob.trackingAuthorizationStatus();
+      if (t.status === 'notDetermined') await AdMob.requestTrackingAuthorization();
+    }
+    await AdMob.initialize({ initializeForTesting: ADS.testing });
+    AdMob.addListener('bannerAdSizeChanged', s => setAdSpace(s && s.height ? s.height : 0));
+    await AdMob.showBanner({ adId: ADS[platform], adSize: 'ADAPTIVE_BANNER', position: 'BOTTOM_CENTER', margin: 0, isTesting: ADS.testing });
+  } catch (e) {
+    console.warn('ads unavailable', e);
+    setAdSpace(0);
+  }
+}
+
 buildLevels(); resize();
+setTimeout(startAds, 400);
 sim = makeSim(LEVELS[Math.min(3, LEVELS.length - 1)]); buildChains();
 requestAnimationFrame(tick);

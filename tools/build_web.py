@@ -33,8 +33,7 @@ def page_body():
 APP_CSS = """
 /* app shell: no zoom, no long-press menus, clear the notch and home bar */
 html, body { touch-action: none; -webkit-touch-callout: none; overscroll-behavior: none; }
-.hud { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
-.toast { top: calc(70px + env(safe-area-inset-top, 0px)); }
+.topbar { padding-top: env(safe-area-inset-top, 0px); }
 .overlay { padding-top: calc(20px + env(safe-area-inset-top, 0px)); padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
 """
 

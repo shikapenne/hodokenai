@@ -23,12 +23,15 @@ body {
   overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-#app { position: relative; height: 100%; }
+#app { position: relative; height: calc(100% - var(--ad-h, 0px)); }
+/* the banner (drawn natively by the app) sits in the space below #app */
+.ad-gap { position: fixed; left: 0; right: 0; bottom: 0; height: var(--ad-h, 0px); background: #0b0812; pointer-events: none; }
 [hidden] { display: none !important; }
 #c { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
 
+.topbar { position: absolute; left: 0; right: 0; top: 0; z-index: 2; display: flex; flex-direction: column; pointer-events: none; }
 .hud {
-  position: absolute; left: 0; right: 0; top: 0; z-index: 2; pointer-events: none;
+  pointer-events: none;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
@@ -45,9 +48,9 @@ body {
 
 
 .bar {
-  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
-  display: flex; justify-content: space-between; gap: 10px;
-  padding-top: 10px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  pointer-events: auto;
+  display: flex; justify-content: space-between; gap: 8px;
+  padding-top: 0; padding-bottom: 8px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 button { font: inherit; color: inherit; cursor: pointer; }
@@ -56,6 +59,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   padding: 9px 18px; font-size: 14px; font-weight: 500; letter-spacing: 0.05em;
 }
 .btn:hover { border-color: var(--brass); }
+.bar .btn { flex: 1; padding: 8px 6px; font-size: 13px; white-space: nowrap; }
 .btn:focus-visible, .lv:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .btn.primary { background: var(--brass); color: #1a1326; border-color: var(--brass); font-weight: 700; }
 
@@ -85,25 +89,28 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .res { font-size: 14px; color: var(--muted); line-height: 1.8; font-variant-numeric: tabular-nums; }
 .res b { color: var(--ivory); font-size: 22px; font-weight: 700; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
-.toast { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); z-index: 3; font-size: 13px; color: var(--muted); pointer-events: none; transition: opacity .6s; white-space: nowrap; }
+.toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 3; font-size: 13px; color: var(--muted); pointer-events: none; transition: opacity .6s; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
 </style>
 
+<div class="ad-gap" aria-hidden="true"></div>
 <div id="app">
   <canvas id="c" aria-label="絡まったネックレスのトレイ"></canvas>
-  <div class="hud">
-    <div class="lvl-wrap"><div class="lvl" id="lvlName">ほどけない<small>LEVEL 1</small></div><button class="snd" id="soundBtn" type="button" aria-pressed="true">音 オン</button></div>
-    <div class="stats">
-      <div class="stat" id="crossBox"><b id="cross">–</b><span>交差</span></div>
-      <div class="stat"><b id="time">0:00.0</b><span>時間</span></div>
+  <div class="topbar">
+    <div class="hud">
+      <div class="lvl-wrap"><div class="lvl" id="lvlName">ほどけない<small>LEVEL 1</small></div><button class="snd" id="soundBtn" type="button" aria-pressed="true">音 オン</button></div>
+      <div class="stats">
+        <div class="stat" id="crossBox"><b id="cross">–</b><span>交差</span></div>
+        <div class="stat"><b id="time">0:00.0</b><span>時間</span></div>
+      </div>
+    </div>
+    <div class="bar">
+      <button class="btn" id="menuBtn" type="button">レベル選択</button>
+      <button class="btn" id="viewBtn" type="button">視点を戻す</button>
+      <button class="btn" id="retryBtn" type="button">最初から</button>
     </div>
   </div>
   <div class="toast" id="toast">鎖をつまんで引いてみてください</div>
-  <div class="bar">
-    <button class="btn" id="menuBtn" type="button">レベル選択</button>
-    <button class="btn" id="viewBtn" type="button">視点を戻す</button>
-    <button class="btn" id="retryBtn" type="button">最初から</button>
-  </div>
 
   <div class="overlay" id="menu">
     <div class="card">
