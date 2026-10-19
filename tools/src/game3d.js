@@ -121,7 +121,7 @@ function buildChains() {
   for (const m of [...linkMeshes, ...pearlMeshes, ...extras]) { scene.remove(m); if (m.dispose) m.dispose(); }
   for (const f of effects) f.cleanup(); effects.length = 0;
   linkMeshes = []; pearlMeshes = []; extras = [];
-  kindOf = new Array(sim.N); sim.chains.forEach(c => { for (let i = c.start; i < c.start + c.n; i++) kindOf[i] = c.kind; });
+  kindOf = new Array(sim.N); sim.chains.forEach(c => { for (let i = c.start; i < c.start + c.n; i++) kindOf[i] = c.kind; if (c.pend !== undefined) kindOf[c.pend] = 'pearl'; });
   sim.chains.forEach((c, ci) => {
     const nSeg = c.n - 1;
     if (c.kind === 'pearl') {
@@ -195,13 +195,19 @@ function syncChains() {
       const dx = px[i] - px[j], dy = py[i] - py[j], l = Math.hypot(dx, dy) || 1;
       e.position.set(px[i] + dx / l * 4 - W / 2, pz[i], py[i] + dy / l * 4 - H / 2);
     } else {
-      // pendant: lies beside the chain, pointing away from it
+      // pendant: the stone is its own physical body (sim.chains[].pend) hanging off the middle link
       const a = Math.max(c0(e), i - 1), b = Math.min(c1(e), i + 1);
       let dx = px[b] - px[a], dy = py[b] - py[a]; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-      const nx = -dy, ny = dx, h = e.userData.hang;
-      e.position.set(px[i] + nx * h - W / 2, Math.max(R * 0.5, pz[i] - 1.5) + (e.userData.bail ? 1.2 : 0), py[i] + ny * h - H / 2);
-      if (e.userData.bail) e.rotation.set(0, Math.atan2(dx, dy), 0);
-      else e.rotation.set(0, Math.atan2(nx, ny), 0);
+      const P = e.userData.chain.pend;
+      let nx = px[P] - px[i], ny = py[P] - py[i]; const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+      if (e.userData.bail) {
+        const f = 0.32;
+        e.position.set(px[i] + (px[P] - px[i]) * f - W / 2, pz[i] + (pz[P] - pz[i]) * f + 0.6, py[i] + (py[P] - py[i]) * f - H / 2);
+        e.rotation.set(0, Math.atan2(dx, dy), 0);
+      } else {
+        e.position.set(px[P] - W / 2, Math.max(1.5, pz[P] - 1.5), py[P] - H / 2);
+        e.rotation.set(0, Math.atan2(nx, ny), 0);
+      }
     }
   }
 }

@@ -4,8 +4,8 @@ function positions(s){const a=new Float32Array(s.N*3);for(let i=0;i<s.N;i++){a[i
 function make(spec,seed,frames){
   const s=new Sim(W,H,spec,seed);
   const rnd=mulberry32(seed*7+1);
-  const P=s.pocket; s.box={cx:P.cx,cy:P.cy,r:P.r*1.15,z:P.z};
-  const K=spec.chains.length+1, agents=[];
+  const P=s.pocket; const TIGHT=+(process.env.TIGHT||0.85); s.box={cx:P.cx,cy:P.cy,r:P.r*TIGHT,z:P.z*TIGHT};
+  const K=spec.chains.length+2, agents=[];
   for(let f=0;f<frames;f++){
     for(let k=0;k<K;k++){
       let a=agents[k];

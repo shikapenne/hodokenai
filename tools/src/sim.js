@@ -4,6 +4,9 @@ const D = 8;          // link length
 // chains that are built differently: thick Cuban-style gold uses fat, long links
 const CHAIN_SIZE = { kihei: { r: 6.5, d: 12 } };
 function sizeOf(kind) { return CHAIN_SIZE[kind] || { r: R, d: D }; }
+// pendants: a stone hanging off the middle link. It is a real body that snags on other chains.
+const PEND_R = 4.6, PEND_L = 9;
+const hasPendant = c => c.pendant !== undefined ? c.pendant : c.kind !== 'kihei';
 const SUB = 8;        // substeps per frame
 const DT = 1 / 60 / SUB;
 let GRAV_ACC = 300;  // low gravity: piles stay put instead of creeping
@@ -36,7 +39,9 @@ class Sim {
     this.W = W; this.H = H;
     const rnd = mulberry32(seed);
     this.rnd = rnd;
-    const total = spec.chains.reduce((s, c) => s + c.links + 1, 0);
+    const chainParticles = spec.chains.reduce((s, c) => s + c.links + 1, 0);
+    const nPend = spec.chains.filter(hasPendant).length;
+    const total = chainParticles + nPend;
     this.N = total;
     this.px = new Float64Array(total); this.py = new Float64Array(total); this.pz = new Float64Array(total);
     this.ox = new Float64Array(total); this.oy = new Float64Array(total); this.oz = new Float64Array(total);
@@ -89,12 +94,31 @@ class Sim {
       this.chains.push({ start: base, n, kind: c.kind, r: cr, d: cd });
       base += n;
     }
+    // pendant particles come after all chain particles, one segment from the middle link
+    this.pendIdx = []; this.isPend = [];
+    for (let ci = 0; ci < this.chains.length; ci++) {
+      const ch = this.chains[ci];
+      if (!hasPendant(spec.chains[ci])) { this.pendIdx.push(-1); continue; }
+      const i = base++, kmid = ch.n >> 1, m = ch.start + kmid;
+      if (preset && preset.length >= (i + 1) * 3) { this.px[i] = preset[i * 3]; this.py[i] = preset[i * 3 + 1]; this.pz[i] = preset[i * 3 + 2]; }
+      else { const a = this.chains[ci].start + Math.max(0, kmid - 1), b = this.chains[ci].start + Math.min(ch.n - 1, kmid + 1);
+        let dx = this.px[b] - this.px[a], dy = this.py[b] - this.py[a]; const l = Math.hypot(dx, dy) || 1;
+        this.px[i] = this.px[m] - dy / l * PEND_L; this.py[i] = this.py[m] + dx / l * PEND_L; this.pz[i] = Math.max(PEND_R, this.pz[m]); }
+      this.ox[i] = this.px[i]; this.oy[i] = this.py[i]; this.oz[i] = this.pz[i];
+      ch.pend = i; this.pendIdx.push(i);
+      sa.push(m); sb.push(i); sc.push(ci); sk.push(kmid);
+    }
     this.sa = Int32Array.from(sa); this.sb = Int32Array.from(sb);
     this.sc = Int32Array.from(sc); this.sk = Int32Array.from(sk);
     this.S = sa.length;
     this.rad = new Float64Array(total); this.len = new Float64Array(this.S); this.srad = new Float64Array(this.S);
     for (const ch of this.chains) for (let i = ch.start; i < ch.start + ch.n; i++) this.rad[i] = ch.r;
-    for (let q = 0; q < this.S; q++) { const ch = this.chains[sc[q]]; this.len[q] = ch.d; this.srad[q] = ch.r; }
+    this.pendSeg = new Uint8Array(this.S);
+    for (let q = 0; q < this.S; q++) {
+      const ch = this.chains[sc[q]];
+      if (sb[q] >= chainParticles) { this.len[q] = PEND_L; this.srad[q] = PEND_R; this.pendSeg[q] = 1; this.rad[sb[q]] = PEND_R; }
+      else { this.len[q] = ch.d; this.srad[q] = ch.r; }
+    }
     this.broken = new Uint8Array(this.S);
     this.stretch = new Float32Array(this.S);
     // spatial grid
@@ -398,15 +422,17 @@ class Sim {
     c.removed = true;
     for (let k = 0; k < c.n - 1; k++) this.broken[this.chainSeg(ci) + k] = 1;
     for (let i = c.start; i < c.start + c.n; i++) { this.held[i] = 1; this.w[i] = 0; this.gone[i] = 1; }
+    if (c.pend !== undefined) { const i = c.pend; this.held[i] = 1; this.w[i] = 0; this.gone[i] = 1; for (let q = 0; q < this.S; q++) if (this.sb[q] === i) this.broken[q] = 1; }
   }
   chainSeg(ci) { let s = 0; for (let k = 0; k < ci; k++) s += this.chains[k].n - 1; return s; }
-  chainOf(i) { for (const c of this.chains) if (i < c.start + c.n) return c; return this.chains[this.chains.length - 1]; }
+  chainOf(i) { for (const c of this.chains) if (i < c.start + c.n || c.pend === i) return c; return this.chains[this.chains.length - 1]; }
 
   markNearHeld() {
     this.nearHeld.fill(0);
     for (const gr of this.grabs) {
-      const c = this.chainOf(gr.i);
-      const a = Math.max(c.start, gr.i - NEAR_HELD), b = Math.min(c.start + c.n - 1, gr.i + NEAR_HELD);
+      const c = this.chainOf(gr.i), at = gr.i === c.pend ? c.start + (c.n >> 1) : gr.i;
+      if (c.pend !== undefined) this.nearHeld[c.pend] = 1;
+      const a = Math.max(c.start, at - NEAR_HELD), b = Math.min(c.start + c.n - 1, at + NEAR_HELD);
       for (let j = a; j <= b; j++) this.nearHeld[j] = 1;
     }
   }
@@ -436,15 +462,16 @@ class Sim {
     let count = 0;
     const flags = this.crossFlag || (this.crossFlag = new Uint8Array(this.S));
     flags.fill(0);
+    const pendSeg = this.pendSeg;
     for (let s = 0; s < this.S; s++) {
-      if (this.broken[s]) continue;
+      if (this.broken[s] || pendSeg[s]) continue; // a stone lying on its chain isn't a tangle
       const a0 = sa[s], a1 = sb[s];
       const mx = (px[a0] + px[a1]) * 0.5, my = (py[a0] + py[a1]) * 0.5;
       const gx = (mx / C) | 0, gy = (my / C) | 0;
       for (let yy = Math.max(0, gy - 1); yy <= Math.min(gh - 1, gy + 1); yy++)
         for (let xx = Math.max(0, gx - 1); xx <= Math.min(gw - 1, gx + 1); xx++)
           for (let t = head[yy * gw + xx]; t !== -1; t = next[t]) {
-            if (t <= s) continue;
+            if (t <= s || pendSeg[t]) continue;
             if (sc[t] === sc[s] && Math.abs(sk[t] - sk[s]) <= 1) continue;
             const b0 = sa[t], b1 = sb[t];
             const o1 = orient(px[a0], py[a0], px[a1], py[a1], px[b0], py[b0]);
@@ -465,4 +492,4 @@ class Sim {
 }
 function orient(ax, ay, bx, by, cx, cy) { return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax); }
 
-if (typeof module !== 'undefined') module.exports = { setTune: (a, b, c) => { SLIP = a; GROUND_KEEP = b; if (c !== undefined) GRAV_ACC = c; }, Sim, R, D, LIFT, mulberry32 };
+if (typeof module !== 'undefined') module.exports = { PEND_R, PEND_L, setTune: (a, b, c) => { SLIP = a; GROUND_KEEP = b; if (c !== undefined) GRAV_ACC = c; }, Sim, R, D, LIFT, mulberry32 };
