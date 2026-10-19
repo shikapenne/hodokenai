@@ -251,11 +251,11 @@ function setMuted(m) {
 // ---- chain sounds: tiny metallic clicks synthesised from what the links are doing ----
 // gold rings a little lower and warmer, silver brighter, pearls give a soft clack
 const VOICE = {
-  gold:   { lo: 1150, hi: 1900, q: 12, dec: 0.012, ping: 0 },
-  rose:   { lo: 1100, hi: 1800, q: 12, dec: 0.011, ping: 0 },
-  silver: { lo: 1300, hi: 2150, q: 13, dec: 0.013, ping: 0 },
-  pearl:  { lo: 750, hi: 1250, q: 6, dec: 0.008, ping: 0 },
-  kihei:  { lo: 850, hi: 1450, q: 10, dec: 0.016, ping: 0 },
+  gold:   { lo: 1600, hi: 2650, q: 12, dec: 0.012, ping: 0 },
+  rose:   { lo: 1550, hi: 2500, q: 12, dec: 0.011, ping: 0 },
+  silver: { lo: 1800, hi: 3000, q: 13, dec: 0.013, ping: 0 },
+  pearl:  { lo: 1050, hi: 1750, q: 6, dec: 0.008, ping: 0 },
+  kihei:  { lo: 1200, hi: 2000, q: 10, dec: 0.016, ping: 0 },
 };
 function grain(kind, vol, pan) {
   const v = VOICE[kind] || VOICE.gold, t = audio.currentTime + Math.random() * 0.012;
@@ -290,9 +290,9 @@ function chainSounds() {
   }
   if (total <= 0) { soundBudget = 0; return; }
   // number of clicks this frame grows with the motion, softly capped
-  soundBudget += Math.min(0.45, Math.sqrt(total) * 0.1);
+  soundBudget += Math.min(0.2, Math.sqrt(total) * 0.045);
   const pan = Math.max(-0.8, Math.min(0.8, panSum / total));
-  const vol = Math.min(0.2, 0.08 + total * 0.006);
+  const vol = Math.min(0.6, 0.24 + total * 0.018);
   const kinds = Object.keys(act);
   while (soundBudget >= 1) {
     soundBudget -= 1;
