@@ -633,7 +633,7 @@ function win() {
 
 // ---------- online ranking (Supabase) ----------
 // Fill these in from your Supabase project (Settings > API). Empty = ranking hidden, X posting still works.
-const RANKING = { url: '', anonKey: '' };
+const RANKING = { url: 'https://xzimzkbrhgymavvkzaik.supabase.co', anonKey: 'sb_publishable_l6KHmDsxXfVq7xiZHo5qCw_QfoJOj91' };
 const STORE_URL = ''; // store page to put in posts once the app is public
 const rankingOn = () => !!(RANKING.url && RANKING.anonKey);
 function playerId() {
@@ -647,7 +647,8 @@ function playerId() {
 async function api(path, opts = {}) {
   const res = await fetch(RANKING.url.replace(/\/$/, '') + '/rest/v1/' + path, {
     ...opts,
-    headers: { apikey: RANKING.anonKey, Authorization: 'Bearer ' + RANKING.anonKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    // new-style publishable keys (sb_publishable_…) go in the apikey header only; old JWT anon keys also as a Bearer token
+    headers: { apikey: RANKING.anonKey, ...(RANKING.anonKey.startsWith('eyJ') ? { Authorization: 'Bearer ' + RANKING.anonKey } : {}), 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
   if (!res.ok) throw new Error('ranking ' + res.status + ' ' + (await res.text().catch(() => '')));
   return res.json();

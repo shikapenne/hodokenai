@@ -133,12 +133,12 @@ Mac がない場合は、Mac のクラウドビルドサービス（Codemagic �
 1. [Supabase](https://supabase.com/) で無料プロジェクトを作る（リージョンは Tokyo がおすすめ）。
 2. 左メニューの **SQL Editor** を開き、`server/supabase.sql` の中身を貼って **Run**。
    - 表（scores）、だれでも読めて直接は書けない設定、自己ベストだけを残す登録用の関数ができます。
-3. **Project Settings → API** から **Project URL** と **anon public** キーをコピーする。
+3. **Project Settings → API Keys** から **Project URL** と **Publishable key**（`sb_publishable_` で始まるもの。古いプロジェクトでは anon public キー）をコピーする。
 4. `tools/src/game3d.js` の `RANKING` に入れる。
    ```js
    const RANKING = { url: 'https://xxxx.supabase.co', anonKey: 'eyJ...' };
    ```
-   - anon キーはアプリに入れて公開してよい種類のキーです。書き込みは登録用の関数経由しかできません。
+   - Publishable key（anon キー）はアプリに入れて公開してよい種類のキーです。書き込みは登録用の関数経由しかできません。**Secret key（service_role）は絶対にアプリに入れないでください。**
 5. ストアのページができたら、`STORE_URL` にそのURLを入れる（Xの投稿に付きます）。
 
 不正対策は最低限です。5秒未満と24時間超のタイム、13文字以上の名前、禁止語を含む名前は、サーバー側で受け付けません。

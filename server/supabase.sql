@@ -17,6 +17,9 @@ alter table public.scores enable row level security;
 -- 誰でもランキングを読める（名前とタイムだけ）。直接の書き込みは不可。
 drop policy if exists "read scores" on public.scores;
 create policy "read scores" on public.scores for select using (true);
+-- 新しいSupabaseプロジェクトでは表が自動で公開されないことがあるので、読む権限だけを明示する
+grant select on public.scores to anon, authenticated;
+revoke insert, update, delete on public.scores from anon, authenticated;
 
 -- 記録の登録はこの関数経由だけ。自己ベストより遅いタイムは上書きしない。
 -- banned words for names, matched after the same normalization the game uses
