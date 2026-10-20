@@ -7,6 +7,9 @@ function sizeOf(kind) { return CHAIN_SIZE[kind] || { r: R, d: D }; }
 // pendants: a stone hanging off the middle link. It is a real body that snags on other chains.
 const PEND_R = 4.6, PEND_L = 9;
 const hasPendant = c => c.pendant !== undefined ? c.pendant : c.kind !== 'kihei';
+// how many stones hang along a necklace (spread evenly between the ends)
+const stonesOf = c => c.stones !== undefined ? c.stones : (hasPendant(c) ? 1 : 0);
+const stoneLinks = (n, m) => Array.from({ length: m }, (_, j) => Math.max(3, Math.min(n - 4, Math.round((j + 1) * (n - 1) / (m + 1)))));
 const SUB = 8;        // substeps per frame
 const DT = 1 / 60 / SUB;
 let GRAV_ACC = 300;  // low gravity: piles stay put instead of creeping
@@ -35,13 +38,52 @@ function mulberry32(a) {
   };
 }
 
+// where two 2D segments cross: [u along the first, v along the second], or null
+function segHit(ax, ay, bx, by, cx, cy, dx, dy) {
+  const rx = bx - ax, ry = by - ay, qx = dx - cx, qy = dy - cy;
+  const den = rx * qy - ry * qx; if (Math.abs(den) < 1e-9) return null;
+  const wx = cx - ax, wy = cy - ay;
+  const u = (wx * qy - wy * qx) / den, v = (wx * ry - wy * rx) / den;
+  return u > 0 && u < 1 && v > 0 && v < 1 ? [u, v] : null;
+}
+// knot determinant of a closed curve given its crossings as positions along the curve ({ over, under });
+// 1 for an unknot (and for almost nothing else). Computed modulo two primes so it stays exact.
+function knotDet(X) {
+  const n = X.length; if (n < 2) return 1;
+  const ord = X.map((e, i) => i).sort((a, b) => X[a].under - X[b].under), U = ord.map(i => X[i].under);
+  const arcOf = x => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (U[m] < x) lo = m + 1; else hi = m; } return lo % n; };
+  const rows = ord.map((xi, j) => ({ o: arcOf(X[xi].over), a: j, b: (j + 1) % n }));
+  const det = P => {
+    const N = n - 1, M = Array.from({ length: N }, () => new Array(N).fill(0));
+    rows.forEach((r, j) => { if (j >= N) return; const add = (c, v) => { if (c < N) M[j][c] = (M[j][c] + v + P) % P; }; add(r.o, 2); add(r.a, -1); add(r.b, -1); });
+    let d = 1;
+    for (let col = 0; col < N; col++) {
+      let piv = -1; for (let r = col; r < N; r++) if (M[r][col]) { piv = r; break; }
+      if (piv < 0) return 0;
+      if (piv !== col) { const tmp = M[piv]; M[piv] = M[col]; M[col] = tmp; d = P - d; }
+      const pv = M[col][col]; d = mulmod(d, pv, P);
+      const inv = powmod(pv, P - 2, P);
+      for (let r = col + 1; r < N; r++) {
+        const f = M[r][col]; if (!f) continue;
+        const k = mulmod(f, inv, P), Rr = M[r], Rc = M[col];
+        for (let c2 = col; c2 < N; c2++) if (Rc[c2]) Rr[c2] = (Rr[c2] - mulmod(k, Rc[c2], P) + P) % P;
+      }
+    }
+    return d % P;
+  };
+  const ok = P => { const d = det(P); return d === 1 || d === P - 1; };
+  return ok(67108859) && ok(67108837) ? 1 : 0;
+}
+function mulmod(a, b, P) { return (a * b) % P; } // a, b < 2^26: the product stays exact in a double
+function powmod(a, e, P) { let r = 1; a %= P; while (e > 0) { if (e & 1) r = mulmod(r, a, P); a = mulmod(a, a, P); e = Math.floor(e / 2); } return r; }
+
 class Sim {
   constructor(W, H, spec, seed, preset) {
     this.W = W; this.H = H;
     const rnd = mulberry32(seed);
     this.rnd = rnd;
     const chainParticles = spec.chains.reduce((s, c) => s + c.links + 1, 0);
-    const nPend = spec.chains.filter(hasPendant).length;
+    const nPend = spec.chains.reduce((s, c) => s + stonesOf(c), 0);
     const total = chainParticles + nPend;
     this.N = total;
     this.px = new Float64Array(total); this.py = new Float64Array(total); this.pz = new Float64Array(total);
@@ -95,20 +137,28 @@ class Sim {
       this.chains.push({ start: base, n, kind: c.kind, r: cr, d: cd });
       base += n;
     }
-    // pendant particles come after all chain particles, one segment from the middle link
-    this.pendIdx = []; this.isPend = [];
+    // stone particles come after all chain particles, each one segment off its link
+    this.pendIdx = []; this.pendAt = new Int32Array(total).fill(-1);
     for (let ci = 0; ci < this.chains.length; ci++) {
-      const ch = this.chains[ci];
-      if (!hasPendant(spec.chains[ci])) { this.pendIdx.push(-1); continue; }
-      const i = base++, kmid = ch.n >> 1, m = ch.start + kmid;
-      if (preset && preset.length >= (i + 1) * 3) { this.px[i] = preset[i * 3]; this.py[i] = preset[i * 3 + 1]; this.pz[i] = preset[i * 3 + 2]; }
-      else { const a = this.chains[ci].start + Math.max(0, kmid - 1), b = this.chains[ci].start + Math.min(ch.n - 1, kmid + 1);
-        let dx = this.px[b] - this.px[a], dy = this.py[b] - this.py[a]; const l = Math.hypot(dx, dy) || 1;
-        this.px[i] = this.px[m] - dy / l * PEND_L; this.py[i] = this.py[m] + dx / l * PEND_L; this.pz[i] = Math.max(PEND_R, this.pz[m]); }
-      this.ox[i] = this.px[i]; this.oy[i] = this.py[i]; this.oz[i] = this.pz[i];
-      ch.pend = i; this.pendIdx.push(i);
-      sa.push(m); sb.push(i); sc.push(ci); sk.push(kmid);
+      const ch = this.chains[ci]; ch.pends = [];
+      const m = stonesOf(spec.chains[ci]);
+      if (!m) { this.pendIdx.push(-1); continue; }
+      for (const kmid of stoneLinks(ch.n, m)) {
+        const i = base++, at = ch.start + kmid;
+        if (preset && preset.length >= (i + 1) * 3) { this.px[i] = preset[i * 3]; this.py[i] = preset[i * 3 + 1]; this.pz[i] = preset[i * 3 + 2]; }
+        else { const a = ch.start + Math.max(0, kmid - 1), b = ch.start + Math.min(ch.n - 1, kmid + 1);
+          let dx = this.px[b] - this.px[a], dy = this.py[b] - this.py[a]; const l = Math.hypot(dx, dy) || 1;
+          const side = ch.pends.length & 1 ? -1 : 1; // alternate sides so neighbours don't start on top of each other
+          this.px[i] = this.px[at] - side * dy / l * PEND_L; this.py[i] = this.py[at] + side * dx / l * PEND_L; this.pz[i] = Math.max(PEND_R, this.pz[at]); }
+        this.ox[i] = this.px[i]; this.oy[i] = this.py[i]; this.oz[i] = this.pz[i];
+        ch.pends.push(i); this.pendAt[i] = at;
+        sa.push(at); sb.push(i); sc.push(ci); sk.push(kmid);
+      }
+      ch.pend = ch.pends[0]; this.pendIdx.push(ch.pend);
     }
+    // which necklace each particle belongs to
+    this.ci = new Int32Array(total);
+    this.chains.forEach((ch, k) => { for (let i = ch.start; i < ch.start + ch.n; i++) this.ci[i] = k; for (const i of ch.pends) this.ci[i] = k; });
     this.sa = Int32Array.from(sa); this.sb = Int32Array.from(sb);
     this.sc = Int32Array.from(sc); this.sk = Int32Array.from(sk);
     this.S = sa.length;
@@ -423,18 +473,18 @@ class Sim {
     c.removed = true;
     for (let k = 0; k < c.n - 1; k++) this.broken[this.chainSeg(ci) + k] = 1;
     for (let i = c.start; i < c.start + c.n; i++) { this.held[i] = 1; this.w[i] = 0; this.gone[i] = 1; }
-    if (c.pend !== undefined) { const i = c.pend; this.held[i] = 1; this.w[i] = 0; this.gone[i] = 1; for (let q = 0; q < this.S; q++) if (this.sb[q] === i) this.broken[q] = 1; }
+    for (const i of c.pends) { this.held[i] = 1; this.w[i] = 0; this.gone[i] = 1; for (let q = 0; q < this.S; q++) if (this.sb[q] === i) this.broken[q] = 1; }
   }
   chainSeg(ci) { let s = 0; for (let k = 0; k < ci; k++) s += this.chains[k].n - 1; return s; }
-  chainOf(i) { for (const c of this.chains) if (i < c.start + c.n || c.pend === i) return c; return this.chains[this.chains.length - 1]; }
+  chainOf(i) { return this.chains[this.ci[i]]; }
 
   markNearHeld() {
     this.nearHeld.fill(0);
     for (const gr of this.grabs) {
-      const c = this.chainOf(gr.i), at = gr.i === c.pend ? c.start + (c.n >> 1) : gr.i;
-      if (c.pend !== undefined) this.nearHeld[c.pend] = 1;
+      const c = this.chainOf(gr.i), at = this.pendAt[gr.i] >= 0 ? this.pendAt[gr.i] : gr.i;
       const a = Math.max(c.start, at - NEAR_HELD), b = Math.min(c.start + c.n - 1, at + NEAR_HELD);
       for (let j = a; j <= b; j++) this.nearHeld[j] = 1;
+      for (const p of c.pends) if (this.pendAt[p] >= a && this.pendAt[p] <= b) this.nearHeld[p] = 1;
     }
   }
 
@@ -455,6 +505,54 @@ class Sim {
     return mx;
   }
 
+
+  // ---- is a necklace really untangled? (so it may be closed into a loop) ----
+  // Against each other necklace: every crossing between the two goes the same way, so one simply lies on top of
+  // the other and can be lifted off. With itself: closing it with a strand that passes over everything gives an
+  // unknotted loop (knot determinant 1). Loose twists, kinks and a chain lying across another don't count.
+  // Returns { free, woven: [[x, y], ...] spots worth pointing at when it isn't }.
+  tangleCheck(ci) {
+    const c = this.chains[ci], { px, py, pz, sa, sb, sc, sk, C, gw, gh, head, next, broken, pendSeg } = this;
+    const seg0 = this.chainSeg(ci), nS = c.n - 1;
+    this.buildGrid();
+    const side = new Map(), spots = new Map(), self = [];
+    for (let k = 0; k < nS; k++) {
+      const s = seg0 + k; if (broken[s]) continue;
+      const a0 = sa[s], a1 = sb[s];
+      const mx = (px[a0] + px[a1]) * 0.5, my = (py[a0] + py[a1]) * 0.5;
+      const gx = (mx / C) | 0, gy = (my / C) | 0;
+      for (let yy = Math.max(0, gy - 1); yy <= Math.min(gh - 1, gy + 1); yy++)
+        for (let xx = Math.max(0, gx - 1); xx <= Math.min(gw - 1, gx + 1); xx++)
+          for (let t = head[yy * gw + xx]; t !== -1; t = next[t]) {
+            if (t === s || pendSeg[t] || broken[t]) continue;
+            const mine = sc[t] === ci;
+            if (mine && (t < s || Math.abs(sk[t] - k) <= 1)) continue;
+            const b0 = sa[t], b1 = sb[t];
+            const hit = segHit(px[a0], py[a0], px[a1], py[a1], px[b0], py[b0], px[b1], py[b1]); if (!hit) continue;
+            const [u, v] = hit;
+            const za = pz[a0] + (pz[a1] - pz[a0]) * u, zb = pz[b0] + (pz[b1] - pz[b0]) * v;
+            if (mine) self.push({ p: k + u, q: sk[t] + v, pOver: za > zb, x: px[a0] + (px[a1] - px[a0]) * u, y: py[a0] + (py[a1] - py[a0]) * u });
+            else {
+              const o = sc[t]; side.set(o, (side.get(o) || 0) | (za > zb ? 1 : 2));
+              if (!spots.has(o)) spots.set(o, []);
+              spots.get(o).push([px[a0] + (px[a1] - px[a0]) * u, py[a0] + (py[a1] - py[a0]) * u]);
+            }
+          }
+    }
+    const woven = [];
+    for (const [o, m] of side) if (m === 3) woven.push(...spots.get(o));
+    if (woven.length) return { free: false, woven };
+    // closing strand from the last link straight back to the first, above everything: it crosses the chain only as the over-strand
+    const ex = px[c.start + nS], ey = py[c.start + nS], bx = px[c.start], by = py[c.start];
+    const X = self.map(e => e.pOver ? { over: e.p, under: e.q, x: e.x, y: e.y } : { over: e.q, under: e.p, x: e.x, y: e.y });
+    for (let k = 1; k < nS - 1; k++) {
+      const a0 = c.start + k, a1 = a0 + 1;
+      const hit = segHit(ex, ey, bx, by, px[a0], py[a0], px[a1], py[a1]);
+      if (hit) X.push({ over: nS + hit[0], under: k + hit[1], x: 0, y: 0 });
+    }
+    if (knotDet(X) === 1) return { free: true, woven: [] };
+    return { free: false, woven: X.filter(e => e.over < nS).map(e => [e.x, e.y]) };
+  }
 
   // number of crossings in the top-down projection
   crossings() {
@@ -493,4 +591,4 @@ class Sim {
 }
 function orient(ax, ay, bx, by, cx, cy) { return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax); }
 
-if (typeof module !== 'undefined') module.exports = { PEND_R, PEND_L, setTune: (a, b, c) => { SLIP = a; GROUND_KEEP = b; if (c !== undefined) GRAV_ACC = c; }, Sim, R, D, LIFT, mulberry32 };
+if (typeof module !== 'undefined') module.exports = { knotDet, PEND_R, PEND_L, setTune: (a, b, c) => { SLIP = a; GROUND_KEEP = b; if (c !== undefined) GRAV_ACC = c; }, Sim, R, D, LIFT, mulberry32 };

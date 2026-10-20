@@ -3,7 +3,7 @@ const W = 560, H = 880;          // velvet: room to lay untangled chains out
 const FW = 300, FH = 500;         // area the camera frames at the start
 const OX = (360 - W) / 2, OY = (640 - H) / 2; // level data was made on a 360x640 tray
 /*LEVELS*/
-const GEMS = [0x9e0b22, 0x0f3592, 0x0a6b43, 0x5a1d8e, 0xb86e06]; // ruby, sapphire, emerald, amethyst, topaz
+const GEMS = [0x9e0b22, 0x0f3592, 0x0a6b43, 0x5a1d8e, 0xb86e06, 0xc23a74, 0x1f8fa3, 0xdfe6f0]; // ruby, sapphire, emerald, amethyst, topaz, pink, aquamarine, crystal
 const METAL = {
   gold:   { color: 0xe0b04a, metal: 1.0, rough: 0.28 },
   silver: { color: 0xd4d9e2, metal: 1.0, rough: 0.24 },
@@ -18,7 +18,7 @@ let sim, level = 0, state = 'menu', frame = 0, t0 = 0, elapsed = 0, started = fa
 const pointers = new Map(); // pointerId -> { g, hold }
 
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
-function bestOf(i) { const v = store('hodoke3-best-' + i); return v ? +v : null; }
+function bestOf(i) { const v = store('hodoke4-best-' + i); return v ? +v : null; }
 function fmt(ms) { const s = ms / 1000; const m = Math.floor(s / 60); return m + ':' + (s % 60).toFixed(1).padStart(4, '0'); }
 function decode(b64) {
   const bin = atob(b64), u8 = new Uint8Array(bin.length);
@@ -113,6 +113,8 @@ function metalMat(kind) {
   const m = METAL[kind];
   return matCache[kind] = new THREE.MeshStandardMaterial({ color: m.color, metalness: m.metal, roughness: m.rough, envMapIntensity: 1.2 });
 }
+const gemMatCache = {};
+function gemMat(col, cut) { const k = col + cut; return gemMatCache[k] || (gemMatCache[k] = new THREE.MeshStandardMaterial({ color: col, metalness: 0.35, roughness: 0.12, envMapIntensity: 1.3, emissive: col, emissiveIntensity: 0.12, flatShading: cut === 'round' || cut === 'oval' })); }
 const cursorMat = new THREE.MeshBasicMaterial({ color: 0xf1e8d8, transparent: true, opacity: 0.85, depthTest: false });
 const holdMat = new THREE.MeshBasicMaterial({ color: 0xd1ab55, transparent: true, opacity: 0.9, depthTest: false });
 const cursorGeo = new THREE.RingGeometry(9, 11, 28);
@@ -121,7 +123,7 @@ function buildChains() {
   for (const m of [...linkMeshes, ...pearlMeshes, ...extras]) { scene.remove(m); if (m.dispose) m.dispose(); }
   for (const f of effects) f.cleanup(); effects.length = 0;
   linkMeshes = []; pearlMeshes = []; extras = [];
-  kindOf = new Array(sim.N); sim.chains.forEach(c => { for (let i = c.start; i < c.start + c.n; i++) kindOf[i] = c.kind; if (c.pend !== undefined) kindOf[c.pend] = 'pearl'; });
+  kindOf = new Array(sim.N); sim.chains.forEach(c => { for (let i = c.start; i < c.start + c.n; i++) kindOf[i] = c.kind; for (const p of c.pends) kindOf[p] = 'pearl'; });
   sim.chains.forEach((c, ci) => {
     const nSeg = c.n - 1;
     if (c.kind === 'pearl') {
@@ -132,18 +134,19 @@ function buildChains() {
       const m = new THREE.InstancedMesh(kh ? kiheiGeo : linkGeo, metalMat(c.kind), nSeg);
       m.castShadow = m.receiveShadow = true; m.userData = { chain: c, kihei: kh }; scene.add(m); linkMeshes.push(m);
     }
-    // pendant hanging from the middle of the chain on a small bail
+    // stones hanging along the chain, each on a small bail; every stone gets its own cut and colour
     const big = c.r / R;
-    if (c.kind !== 'kihei') {
-    const cut = GEM_CUTS[ci % GEM_CUTS.length];
-    const gem = new THREE.Mesh(GEM_GEOS[cut], new THREE.MeshStandardMaterial({ color: GEMS[ci % GEMS.length], metalness: 0.35, roughness: 0.12, envMapIntensity: 1.3, emissive: GEMS[ci % GEMS.length], emissiveIntensity: 0.12, flatShading: cut === 'round' || cut === 'oval' }));
-    gem.scale.setScalar(1.2); gem.castShadow = true; gem.userData = { at: c.start + (c.n >> 1), chain: c, hang: 10 }; scene.add(gem); extras.push(gem);
-    const bail = new THREE.Mesh(bailGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); bail.castShadow = true;
-    bail.userData = { at: c.start + (c.n >> 1), chain: c, hang: 3.2, bail: true }; scene.add(bail); extras.push(bail);
-    }
-    const clasp = new THREE.Mesh(claspGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); clasp.castShadow = true; clasp.scale.setScalar(big);
+    c.pends.forEach((P, j) => {
+      const cut = GEM_CUTS[(ci + j * 2) % GEM_CUTS.length], col = GEMS[(ci * 2 + j) % GEMS.length];
+      const gem = new THREE.Mesh(GEM_GEOS[cut], gemMat(col, cut));
+      gem.scale.setScalar(1.2); gem.castShadow = true; gem.userData = { at: sim.pendAt[P], P, chain: c, hang: 10 }; scene.add(gem); extras.push(gem);
+      const bail = new THREE.Mesh(bailGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); bail.castShadow = true;
+      bail.userData = { at: sim.pendAt[P], P, chain: c, hang: 3.2, bail: true }; scene.add(bail); extras.push(bail);
+    });
+    const endMat = metalMat(c.kind === 'pearl' ? 'gold' : c.kind).clone(); endMat.emissive = new THREE.Color(0xffd27a); endMat.emissiveIntensity = 0; c.endMat = endMat;
+    const clasp = new THREE.Mesh(claspGeo, endMat); clasp.castShadow = true; clasp.scale.setScalar(big);
     clasp.userData = { at: c.start, next: c.start + 1, chain: c }; scene.add(clasp); extras.push(clasp);
-    const ring = new THREE.Mesh(ringGeo, metalMat(c.kind === 'pearl' ? 'gold' : c.kind)); ring.castShadow = true; ring.scale.setScalar(big);
+    const ring = new THREE.Mesh(ringGeo, endMat); ring.castShadow = true; ring.scale.setScalar(big);
     ring.userData = { at: c.start + c.n - 1, next: c.start + c.n - 2, chain: c }; scene.add(ring); extras.push(ring);
   });
 }
@@ -185,6 +188,8 @@ function syncChains() {
     }
     m.instanceMatrix.needsUpdate = true;
   }
+  const pulse = 0.45 + 0.4 * Math.sin(performance.now() / 180);
+  for (const c of sim.chains) if (c.endMat && !c.removed) c.endMat.emissiveIntensity = c.freeHint ? pulse : 0;
   for (const e of extras) {
     if (e.userData.chain.removed) continue;
     const i = e.userData.at;
@@ -198,7 +203,7 @@ function syncChains() {
       // pendant: the stone is its own physical body (sim.chains[].pend) hanging off the middle link
       const a = Math.max(c0(e), i - 1), b = Math.min(c1(e), i + 1);
       let dx = px[b] - px[a], dy = py[b] - py[a]; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-      const P = e.userData.chain.pend;
+      const P = e.userData.P;
       let nx = px[P] - px[i], ny = py[P] - py[i]; const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
       if (e.userData.bail) {
         const f = 0.32;
@@ -299,6 +304,18 @@ function pickSound(i, down) {
   if (!audio || muted) return;
   const k = kindOf[i] || 'gold';
   for (let n = 0; n < (down ? 4 : 3); n++) grain(k, down ? 0.133 : 0.093, (Math.random() - 0.5) * 0.3); // a little shake of the chain
+}
+// the clasp: a crisp double click when it closes, a dull single one when it won't
+function claspClick(ok) {
+  if (!audio || muted) return;
+  const t0c = audio.currentTime;
+  (ok ? [0, 0.045] : [0]).forEach((dt, k) => {
+    const src = audio.createBufferSource(); src.buffer = noiseBuf;
+    const bp = audio.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = ok ? (k ? 5200 : 4300) : 1500; bp.Q.value = ok ? 9 : 4;
+    const g = audio.createGain(), st = t0c + dt, dec = ok ? 0.025 : 0.04;
+    g.gain.setValueAtTime(0, st); g.gain.linearRampToValueAtTime(ok ? 0.5 : 0.35, st + 0.001); g.gain.exponentialRampToValueAtTime(0.0001, st + dec);
+    src.connect(bp).connect(g).connect(master); src.start(st, Math.random() * 0.2, dec + 0.02);
+  });
 }
 function chime() {
   if (!audio) return;
@@ -548,7 +565,7 @@ cvs.addEventListener('wheel', e => {
 
 // ---------- game flow ----------
 function makeSim(L) {
-  const spec = { chains: L.chains.map(([kind, links]) => ({ kind, links })) };
+  const spec = { chains: L.chains.map(([kind, links, stones]) => ({ kind, links, stones })) };
   return new Sim(W, H, spec, 1, L._pos || (L._pos = decode(L.pos)));
 }
 // levels open one at a time: clearing a level opens the next
@@ -571,7 +588,7 @@ function start(i) {
   $('lvlName').innerHTML = `${levelText(LEVELS[i].id)[0]}<small>LEVEL ${i + 1}</small>`;
   $('menu').hidden = true; $('win').hidden = true; $('pause').hidden = true; $('time').textContent = '0:00.0';
   crossings = sim.crossings(); $('cross').textContent = crossings;
-  $('howto').hidden = true;
+  $('howto').hidden = true; hintShown = false;
   // the very first time level 1 is played, explain the controls before anything else
   if (i === 0 && !store('hodoke-howto-seen')) showHowto(false);
   else showToast(t('toastStart'), 2600);
@@ -611,6 +628,7 @@ function update() {
   if (!sim || state === 'menu' || state === 'paused') return;
   frame++; sim.step(); chainSounds();
   if (state !== 'play') return;
+  checkClasp();
   if (started) { elapsed = performance.now() - t0; $('time').textContent = fmt(elapsed); }
   if (frame % 6 === 0) {
     crossings = sim.crossings(); $('cross').textContent = crossings;
@@ -618,31 +636,63 @@ function update() {
     if (started) checkFree();
   }
 }
-// a necklace with no crossings at all (with itself or others), not held, for a moment: it's free
+// ---------- clasp: a necklace is finished by joining its two ends, and that only works once it is untangled ----------
+// (closing a loop around a knot would make it impossible to undo, so the clasp refuses until it is really free)
+const CLOSE_D = 13, REARM_D = 28;
+let hintShown = false;
 function checkFree() {
-  const held = new Set(); for (const p of pointers.values()) held.add(sim.chainOf(p.g.i));
-  let seg = 0, left = 0;
-  sim.chains.forEach((c, ci) => {
-    const n = c.n - 1;
-    if (!c.removed) {
-      let crossed = false;
-      for (let k = seg; k < seg + n; k++) if (sim.crossFlag[k]) { crossed = true; break; }
-      c.freeFrames = (!crossed && !held.has(c)) ? (c.freeFrames || 0) + 6 : 0;
-      if (c.freeFrames >= 36) {
-        vanish(ci);
-        const remain = sim.chains.filter(q => !q.removed).length;
-        if (remain > 0) showToast(t('toastFreed', remain), 1800);
-      } else left++;
+  // keep the "this one is free" glow up to date, one necklace per call so the cost stays small
+  const live = []; sim.chains.forEach((c, ci) => { if (!c.removed) live.push(ci); });
+  if (!live.length) return;
+  checkFree.k = ((checkFree.k || 0) + 1) % live.length;
+  const ci = live[checkFree.k], c = sim.chains[ci];
+  const was = c.freeHint; c.freeHint = sim.tangleCheck(ci).free;
+  if (c.freeHint && !was && !hintShown) { hintShown = true; showToast(t('toastClasp'), 3600); }
+}
+function checkClasp() {
+  const { px, py } = sim;
+  for (const p of pointers.values()) {
+    const i = p.g.i, c = sim.chainOf(i); if (c.removed || sim.pendAt[i] >= 0) continue;
+    const k = i - c.start, last = c.n - 1;
+    let a, b;
+    if (k <= 2) { a = c.start; b = c.start + last; } else if (k >= last - 2) { a = c.start + last; b = c.start; } else continue;
+    const d = Math.hypot(px[a] - px[b], py[a] - py[b]); // seen from above: the held end is lifted, so height doesn't count
+    if (d > REARM_D) c.claspArmed = true;
+    if (d < CLOSE_D && c.claspArmed) {
+      c.claspArmed = false;
+      const ci = sim.chains.indexOf(c), r = sim.tangleCheck(ci);
+      if (r.free) { closeNecklace(ci); return; }
+      showToast(t('stillTangled'), 2000); hapticTap(); claspClick(false); flashSpots(r.woven);
     }
-    seg += n;
+  }
+}
+function closeNecklace(ci) {
+  const c = sim.chains[ci];
+  for (const [id, p] of [...pointers]) if (sim.chainOf(p.g.i) === c) { sim.release(p.g); pointers.delete(id); }
+  claspClick(true);
+  vanish(ci);
+  const remain = sim.chains.filter(q => !q.removed).length;
+  if (remain > 0) showToast(t('toastFreed', remain), 1800);
+  else if (state === 'play') { state = 'clearing'; showToast(t('toastAll'), 1600); setTimeout(win, 1500); }
+}
+// small red pulses where a necklace is still caught
+const spotGeo = new THREE.RingGeometry(5, 7.5, 24);
+function flashSpots(spots) {
+  const list = spots.slice(0, 24).map(([x, y]) => {
+    const m = new THREE.Mesh(spotGeo, new THREE.MeshBasicMaterial({ color: 0xff5a4a, transparent: true, depthTest: false, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x - W / 2, 14, y - H / 2); m.renderOrder = 10; scene.add(m); return m;
   });
-  if (left === 0 && state === 'play') { state = 'clearing'; showToast(t('toastAll'), 1600); setTimeout(win, 1500); }
+  effects.push({
+    t: 0,
+    update(dt) { this.t += dt; const a = Math.max(0, 1 - this.t / 1.8) * (0.55 + 0.45 * Math.sin(this.t * 14)); for (const m of list) { m.material.opacity = a; m.scale.setScalar(1 + this.t * 0.4); } return this.t < 1.8; },
+    cleanup() { for (const m of list) { scene.remove(m); m.material.dispose(); } },
+  });
 }
 let lastResult = null; // { id, name, ms, rank, total }
 function win() {
   state = 'over';
   const prev = bestOf(level), isBest = !prev || elapsed < prev;
-  if (isBest) store('hodoke3-best-' + level, String(Math.round(elapsed)));
+  if (isBest) store('hodoke4-best-' + level, String(Math.round(elapsed)));
   $('winRes').innerHTML = `<b>${fmt(elapsed)}</b>　${isBest ? t('newBest') : t('fastest', fmt(prev))}<br>${t('untangled', levelText(LEVELS[level].id)[0])}`;
   $('nextBtn').hidden = level >= LEVELS.length - 1;
   lastResult = { id: LEVELS[level].id, ms: Math.round(elapsed) };
