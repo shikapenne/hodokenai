@@ -831,8 +831,9 @@ try { const sb = window.Capacitor && window.Capacitor.Plugins && window.Capacito
 // IDs below are Google's public TEST units. Replace with your own from AdMob before release
 // (and set testing to false). See README "広告".
 const ADS = {
+  // true = Google's test ads (while testing). Set to false when the app goes public, so the real banner shows.
   testing: true,
-  android: 'ca-app-pub-3940256099942544/9214589741',
+  android: 'ca-app-pub-2112904724600297/8986796706',
   ios: 'ca-app-pub-3940256099942544/2435281174',
 };
 function setAdSpace(h) {
