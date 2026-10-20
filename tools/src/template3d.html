@@ -76,16 +76,24 @@ button { font: inherit; color: inherit; cursor: pointer; }
   overflow-y: auto;
 }
 .card { width: min(400px, 100%); display: grid; gap: 16px; }
-.title { font-family: var(--f-display); font-weight: 800; font-size: clamp(40px, 12vw, 56px); letter-spacing: 0.06em; line-height: 1; text-wrap: balance; }
-.lead { font-size: 14px; line-height: 1.8; color: var(--ivory); opacity: .9; }
-.rules { display: grid; gap: 6px; font-size: 12.5px; line-height: 1.6; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+#menu .card { gap: 12px; }
+#menu .levels { gap: 6px; }
+/* short screens (small phones with the ad banner): drop the lead so the title screen never scrolls */
+@media (max-height: 660px) { #menu .lead { display: none; } #menu .card { gap: 10px; } .lv .ds { font-size: 11px; line-height: 1.35; } }
+@media (max-height: 540px) { .lv .ds { display: none; } #menu .subtitle { display: none; } }
+.title { font-family: var(--f-display); font-weight: 800; font-size: clamp(32px, 10vw, 52px); letter-spacing: 0.06em; line-height: 1; white-space: nowrap; }
+.lead { font-size: 13px; line-height: 1.7; color: var(--ivory); opacity: .9; }
+.rules { display: grid; gap: 10px; font-size: 14px; line-height: 1.7; color: var(--muted); }
 .rules b { color: var(--ivory); font-weight: 500; }
 .levels { display: grid; gap: 8px; }
 .lv {
   display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 12px; text-align: left;
-  border: 1px solid var(--line); border-radius: 10px; background: rgba(43,33,72,0.55); padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: 10px; background: rgba(43,33,72,0.55); padding: 8px 12px;
 }
 .lv:hover { border-color: var(--brass); }
+.lv:disabled { opacity: 0.45; cursor: default; }
+.lv:disabled:hover { border-color: var(--line); }
+.lv.locked .bt { font-size: 11px; }
 .lv .no { font-family: var(--f-display); font-size: 22px; font-weight: 800; color: var(--brass); }
 .lv .nm { font-weight: 700; font-size: 15px; }
 .lv .ds { font-size: 11.5px; color: var(--muted); }
@@ -146,7 +154,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
       <p class="lead" data-i18n="lead">引き出しの奥で絡まったネックレスを、ほどくゲームです。結び目は、焦って引くほど固く締まります。</p>
       <div class="levels" id="levels"></div>
       <button class="btn" id="boardBtn" type="button" hidden data-i18n="board">ランキングを見る</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="howto" hidden>
+    <div class="card">
+      <div class="big" data-i18n="howTo">遊び方</div>
       <div class="rules" id="rules"></div>
+      <button class="btn primary" id="howtoClose" type="button" data-i18n="startPlay">はじめる</button>
     </div>
   </div>
 
@@ -156,6 +171,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
       <div class="pause-list">
         <button class="btn primary" id="resumeBtn" type="button" data-i18n="resume">つづける</button>
         <button class="btn" id="soundBtn" type="button" aria-pressed="true">音 オン</button>
+        <button class="btn" id="howtoBtn" type="button" data-i18n="howTo">遊び方</button>
         <button class="btn" id="retryBtn" type="button" data-i18n="retry">最初から</button>
         <button class="btn" id="menuBtn" type="button" data-i18n="levels">レベル選択</button>
       </div>

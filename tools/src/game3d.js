@@ -551,15 +551,17 @@ function makeSim(L) {
   const spec = { chains: L.chains.map(([kind, links]) => ({ kind, links })) };
   return new Sim(W, H, spec, 1, L._pos || (L._pos = decode(L.pos)));
 }
+// levels open one at a time: clearing a level opens the next
+const isOpen = i => i === 0 || bestOf(i - 1) !== null;
 function buildLevels() {
   const box = $('levels'); box.innerHTML = '';
   LEVELS.forEach((L, i) => {
-    const b = bestOf(i);
+    const b = bestOf(i), open = isOpen(i);
     const el = document.createElement('button');
-    el.type = 'button'; el.className = 'lv';
+    el.type = 'button'; el.className = 'lv' + (open ? '' : ' locked'); el.disabled = !open;
     const [nm, ds] = levelText(L.id);
-    el.innerHTML = `<span class="no">${i + 1}</span><span><div class="nm">${nm}</div><div class="ds">${ds}</div></span><span class="bt ${b ? 'done' : ''}">${b ? t('fastest', fmt(b)) : t('notCleared')}</span>`;
-    el.onclick = () => start(i);
+    el.innerHTML = `<span class="no">${i + 1}</span><span><div class="nm">${nm}</div><div class="ds">${ds}</div></span><span class="bt ${b ? 'done' : ''}">${b ? t('fastest', fmt(b)) : open ? t('notCleared') : t('locked')}</span>`;
+    if (open) el.onclick = () => start(i);
     box.appendChild(el);
   });
 }
@@ -569,6 +571,23 @@ function start(i) {
   $('lvlName').innerHTML = `${levelText(LEVELS[i].id)[0]}<small>LEVEL ${i + 1}</small>`;
   $('menu').hidden = true; $('win').hidden = true; $('pause').hidden = true; $('time').textContent = '0:00.0';
   crossings = sim.crossings(); $('cross').textContent = crossings;
+  $('howto').hidden = true;
+  // the very first time level 1 is played, explain the controls before anything else
+  if (i === 0 && !store('hodoke-howto-seen')) showHowto(false);
+  else showToast(t('toastStart'), 2600);
+}
+let howtoFromPause = false;
+function showHowto(fromPause) {
+  howtoFromPause = fromPause;
+  if (state === 'play') { state = 'paused'; pausedAt = performance.now(); for (const p of pointers.values()) sim && sim.release(p.g); pointers.clear(); camPts.clear(); gest = null; }
+  $('pause').hidden = true; $('howto').hidden = false;
+}
+function closeHowto() {
+  store('hodoke-howto-seen', '1');
+  $('howto').hidden = true;
+  if (howtoFromPause) { $('pause').hidden = false; return; }
+  if (started) t0 += performance.now() - pausedAt;
+  state = 'play'; last = performance.now(); acc = 0;
   showToast(t('toastStart'), 2600);
 }
 let toastTimer;
@@ -736,6 +755,8 @@ function openMenu() {
 }
 $('menuBtn').onclick = openMenu; $('winMenu').onclick = openMenu;
 $('retryBtn').onclick = () => start(level);
+$('howtoBtn').onclick = () => showHowto(true);
+$('howtoClose').onclick = () => { unlockAudio(); closeHowto(); };
 $('viewBtn').onclick = () => resetView();
 $('pauseBtn').onclick = () => { unlockAudio(); pauseGame(); };
 $('resumeBtn').onclick = () => resumeGame();
