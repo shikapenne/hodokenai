@@ -1,0 +1,49 @@
+{
+  "name": "hodokenai-desktop",
+  "productName": "Hodokenai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ほどけない — PC (Steam) 版",
+  "author": "shikapenne",
+  "main": "main.js",
+  "scripts": {
+    "web": "cd .. && python3 tools/build_web.py --target steam",
+    "start": "npm run web && electron .",
+    "dist": "npm run web && electron-builder --dir"
+  },
+  "build": {
+    "appId": "jp.shikapenne.hodokenai.desktop",
+    "productName": "Hodokenai",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "www/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": "dir",
+      "executableName": "Hodokenai"
+    },
+    "mac": {
+      "target": "dir",
+      "category": "public.app-category.puzzle-games"
+    },
+    "linux": {
+      "target": "dir",
+      "executableName": "hodokenai",
+      "category": "Game"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shikapenne/hodokenai.git"
+  }
+}

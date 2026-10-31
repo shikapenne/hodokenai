@@ -78,6 +78,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card { width: min(400px, 100%); display: grid; gap: 16px; }
 #menu .card { gap: 12px; }
 #menu .levels { gap: 6px; }
+/* PC: many levels sit in two columns on a wide screen */
+@media (min-width: 860px) { #menu .card.wide-card { width: min(820px, 100%); } .levels.many { grid-template-columns: 1fr 1fr; } }
 /* short screens (small phones with the ad banner): drop the lead so the title screen never scrolls */
 @media (max-height: 660px) { #menu .lead { display: none; } #menu .card { gap: 10px; } .lv .ds { font-size: 11px; line-height: 1.35; } }
 @media (max-height: 540px) { .lv .ds { display: none; } #menu .subtitle { display: none; } }
@@ -154,6 +156,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
       <p class="lead" data-i18n="lead">引き出しの奥で絡まったネックレスを、ほどくゲームです。結び目は、焦って引くほど固く締まります。</p>
       <div class="levels" id="levels"></div>
       <button class="btn" id="boardBtn" type="button" hidden data-i18n="board">ランキングを見る</button>
+      <button class="btn" id="quitBtn" type="button" hidden data-i18n="quit">ゲームを終了</button>
     </div>
   </div>
 

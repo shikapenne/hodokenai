@@ -1,6 +1,6 @@
 # 引き継ぎメモ（Claude との作業用）
 
-新しい会話で作業を続けるときに、最初に読むメモです。最終更新：2026-10-31
+新しい会話で作業を続けるときに、最初に読むメモです。最終更新：2026-10-31（Steam 版の土台）
 
 ## プロジェクト
 - 「ほどけない」：絡まったネックレスを指でつまんでほどく 3D 物理パズル。作者は あいざわ（GitHub: shikapenne）。
@@ -19,6 +19,7 @@
 | `tools/build_web.py` | `www/` を作る。`--artifact out.html` で1ファイル版 |
 | `server/schema.sql` → `server/supabase.sql` | ランキング（Supabase、プロジェクト `xzimzkbrhgymavvkzaik`、publishable key はアプリ内）。`.github/workflows/keepalive.yml` で毎日読みに行き、無料枠の自動停止を防いでいる |
 | `android/` `ios/` | Capacitor 8 |
+| `desktop/` | Steam（PC）版の Electron の入れ物（`main.js`） |
 | `.github/workflows/android.yml` | push のたびに APK と署名付き AAB を作る（署名鍵は GitHub Secrets） |
 | `docs/privacy.html` | プライバシーポリシー（GitHub Pages） |
 
@@ -28,16 +29,15 @@
 - 本番前にやること：`ADS.testing = false`、Supabase で `delete from scores;`、本番申請の質問への回答。
 - 次の改善候補：留め具の端どうしを点線で示す、輪にできない理由の表示、L4・L5 の途中保存。
 
-## 次にやること：Steam 版
-- あいざわさんの希望：**難易度を上げた Steam 版**を作る。
-- 方針（案）
-  - 今のゲームを Electron で包んで Windows 版（できれば Mac / Steam Deck も）。GitHub Actions で自動ビルド。
-  - マウス1つで遊べる操作：右クリックで押さえ用ピンを刺す／抜く、など（スマホ版の「二本指で押さえる」がPCでは難しいため）。
-  - PC は速いので、輪を 1.5〜2 倍、本数・石の多い上級レベルを追加。
-  - 広告なしの買い切り。ランキングは Supabase を Steam 版用レベルに分けて使う。Steam 実績も検討。
-  - スマホ版のコードと共通化し、プラットフォームごとの違い（操作・広告・レベル）は設定で切り替える。
+## Steam 版（PC 版）— 2026-10-31 に土台ができた
+- 作り方：`cd desktop && npm install && npm start`（`--target steam` で `desktop/www/` を作って Electron で開く）。`npm run dist` で `desktop/dist/` に配布用フォルダ。
+- `.github/workflows/steam.yml`：push のたびに Windows / Mac / Linux（Steam Deck）版を作り、Artifacts に置く。署名はまだなし。
+- スマホ版との違いは `tools/build_web.py` の `PLATFORMS` で切り替え（`game3d.js` では `PLATFORM`）：広告なし、ピンあり（最大3本）、「ゲームを終了」ボタン、レベル一覧は `tools/src/levels_steam.json`。
+- 操作（PC）：左クリックでつまむ、**右クリックでピンを刺す／ピンを右クリックで抜く**、Delete で全部抜く、Esc でポーズ、F11 / Alt+Enter で全画面切り替え。横長の画面ではトレイを横向きに表示。
+- レベル：スマホ版 L1〜L5（ランキングは L201〜L205 に分けて記録）＋上級 L101〜L105（長い一本 280輪／喜平+金／長い三本／四本／七本）。名前は `i18n.js` の `levelNames`。作り直しは `tools/levelgen/pick.js` → `node resettle.js levels_steam.json L101,...`。
+- ランキングは同じ Supabase。レベルIDを L1xx / L2xx に分けたので、サーバーの変更は不要。
+- まだ：Steam 実績（steamworks.js、App ID が決まってから）、Steam の起動オプション設定、Mac の署名、価格、スマホ版レベルを含めるかの最終判断。
 - あいざわさんの作業：Steamworks 登録（100ドル、売上1,000ドルで返金）、本人確認・税務（W-8BEN）・銀行、支払いから30日は発売不可、「近日登場」ページを2週間以上公開、ストアページとビルドの審査、SteamCMD でのアップロード。
-- まだ決めていないこと：価格、対応OS、スマホ版レベルを含めるか（上級だけにするか）。
 
 ## 作業のきまり
 - コミットの最後に、そのときの会話で指示される Co-Authored-By などの行を付ける。

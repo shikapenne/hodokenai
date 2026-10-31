@@ -2,7 +2,11 @@
 const W = 560, H = 880;          // velvet: room to lay untangled chains out
 const FW = 300, FH = 500;         // area the camera frames at the start
 const OX = (360 - W) / 2, OY = (640 - H) / 2; // level data was made on a 360x640 tray
+/*PLATFORM*/
+// what differs between the phone app and the PC (Steam) build; build_web.py fills this in
+if (typeof PLATFORM === 'undefined') var PLATFORM = { id: 'mobile', ads: true, pins: false, maxPins: 0, quit: false };
 /*LEVELS*/
+const rankIdOf = L => L.rank || L.id; // the Steam build keeps its own leaderboards (L1xx, L2xx)
 const GEMS = [0x9e0b22, 0x0f3592, 0x0a6b43, 0x5a1d8e, 0xb86e06, 0xc23a74, 0x1f8fa3, 0xdfe6f0]; // ruby, sapphire, emerald, amethyst, topaz, pink, aquamarine, crystal
 const METAL = {
   gold:   { color: 0xe0b04a, metal: 1.0, rough: 0.28 },
@@ -401,6 +405,42 @@ function syncMarkers() {
   for (; k < markers.length; k++) markers[k].visible = false;
 }
 
+// ---------- pins (PC): right-click a chain to pin it to the velvet, right-click the pin again to pull it out ----------
+// A mouse has one pointer, so it can't "hold with one finger and pull with the other". A pin does the holding instead.
+const pins = []; // { g, mesh }
+const pinNeedleGeo = new THREE.CylinderGeometry(0.45, 0.45, 22, 6); pinNeedleGeo.translate(0, 11, 0);
+const pinHeadGeo = new THREE.SphereGeometry(3.2, 14, 10); pinHeadGeo.translate(0, 23, 0);
+const pinNeedleMat = new THREE.MeshStandardMaterial({ color: 0xd8dce4, metalness: 1, roughness: 0.25 });
+const pinHeadMat = new THREE.MeshStandardMaterial({ color: 0xc8283c, metalness: 0.1, roughness: 0.35, emissive: 0x400010, emissiveIntensity: 0.4 });
+function addPin(i) {
+  if (pins.length >= PLATFORM.maxPins) removePin(pins[0]); // the oldest pin comes out first
+  const g = sim.setGrab(i, sim.px[i], sim.py[i], R);
+  const mesh = new THREE.Group();
+  const n = new THREE.Mesh(pinNeedleGeo, pinNeedleMat), h = new THREE.Mesh(pinHeadGeo, pinHeadMat);
+  n.castShadow = h.castShadow = true; mesh.add(n, h); mesh.rotation.z = 0.18; scene.add(mesh);
+  pins.push({ g, mesh }); syncPins();
+}
+function removePin(p) {
+  const k = pins.indexOf(p); if (k < 0) return;
+  pins.splice(k, 1); if (sim) sim.release(p.g); scene.remove(p.mesh);
+}
+function clearPins(chain) { for (const p of pins.slice()) if (!chain || sim.chainOf(p.g.i) === chain) removePin(p); }
+function syncPins() {
+  for (const p of pins) { const i = p.g.i; p.mesh.position.set(sim.px[i] - W / 2, sim.pz[i] - 2, sim.py[i] - H / 2); }
+}
+function pinAtScreen(e) {
+  const r = setNdc(e), sx = e.clientX - r.left, sy = e.clientY - r.top;
+  let best = null, bd = 26;
+  for (const p of pins) {
+    proj.set(p.mesh.position.x, p.mesh.position.y + 23, p.mesh.position.z).project(camera); // the round head
+    const d1 = Math.hypot((proj.x + 1) / 2 * r.width - sx, (1 - proj.y) / 2 * r.height - sy);
+    proj.set(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z).project(camera); // or the link it holds
+    const d2 = Math.hypot((proj.x + 1) / 2 * r.width - sx, (1 - proj.y) / 2 * r.height - sy);
+    const d = Math.min(d1, d2); if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
 // ---------- camera (orbit around a point on the tray) ----------
 const view = { x: 0, z: 0, yaw: 0, pitch: 0.30, d: 1000, fit: 1000, fitAll: 2000 };
 const PITCH_MIN = 0.0, PITCH_MAX = 1.15;
@@ -416,8 +456,10 @@ function applyView() {
   camera.lookAt(view.x, 0, view.z);
   camera.updateMatrixWorld();
 }
+// on a wide screen the tray is turned sideways so the long side runs across the screen
+let wide = false;
 function resetView() {
-  Object.assign(view, { x: 0, z: 0, yaw: 0, pitch: 0.30, d: view.fit });
+  Object.assign(view, { x: 0, z: 0, yaw: wide ? Math.PI / 2 : 0, pitch: 0.30, d: view.fit });
   applyView();
 }
 function resize() {
@@ -427,9 +469,13 @@ function resize() {
   const tb = document.querySelector('.topbar').getBoundingClientRect();
   const top = Math.max(40, tb.bottom - r.top), bottom = 20, usable = (r.height - top - bottom) / r.height;
   const tf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const needV = (FH / 2 + 24) / (tf * usable), needH = (FW / 2 + 18) / (tf * camera.aspect);
+  const wasWide = wide; wide = r.width > r.height * 1.1;
+  const fv = wide ? FW : FH, fh = wide ? FH : FW, av = wide ? W : H, ah = wide ? H : W;
+  const needV = (fv / 2 + 24) / (tf * usable), needH = (fh / 2 + 18) / (tf * camera.aspect);
   const fit = Math.max(needV, needH) * 1.04 + 40;
-  view.fitAll = Math.max((H / 2 + 30) / (tf * usable), (W / 2 + 30) / (tf * camera.aspect)) * 1.05 + 40;
+  view.fitAll = Math.max((av / 2 + 30) / (tf * usable), (ah / 2 + 30) / (tf * camera.aspect)) * 1.05 + 40;
+  const oldYaw = wasWide ? Math.PI / 2 : 0; // turned the window? follow it, unless the player has rotated the view
+  if (wasWide !== wide && Math.abs(view.yaw - oldYaw) < 0.01) view.yaw = wide ? Math.PI / 2 : 0;
   const first = view.fit === 1000 && view.d === 1000;
   view.d *= fit / view.fit; view.fit = fit;
   if (first) view.d = fit;
@@ -524,6 +570,16 @@ cvs.addEventListener('pointerdown', e => {
   unlockAudio();
   if (state === 'menu' || pointers.size + camPts.size >= 3) return;
   const isMouse = e.pointerType === 'mouse';
+  if (PLATFORM.pins && isMouse && e.button === 2 && state === 'play' && pointers.size === 0) {
+    const p = pinAtScreen(e);
+    if (p) { removePin(p); pickSound(p.g.i, false); e.preventDefault(); return; }
+    const j = pickAt(e);
+    if (j >= 0) {
+      addPin(j); pickSound(j, true);
+      if (!started) { started = true; t0 = performance.now(); }
+      e.preventDefault(); return;
+    }
+  }
   const i = state === 'play' ? pickAt(e) : -1;
   // a touch on empty space, or a middle-button drag, moves the camera
   if (i < 0 || (isMouse && e.button === 1)) {
@@ -572,6 +628,7 @@ function makeSim(L) {
 const isOpen = i => i === 0 || bestOf(i - 1) !== null;
 function buildLevels() {
   const box = $('levels'); box.innerHTML = '';
+  box.classList.toggle('many', LEVELS.length > 6); box.closest('.card').classList.toggle('wide-card', LEVELS.length > 6);
   LEVELS.forEach((L, i) => {
     const b = bestOf(i), open = isOpen(i);
     const el = document.createElement('button');
@@ -583,7 +640,7 @@ function buildLevels() {
   });
 }
 function start(i) {
-  level = i; sim = makeSim(LEVELS[i]); buildChains(); pointers.clear(); camPts.clear(); gest = null; resetView();
+  clearPins(); level = i; sim = makeSim(LEVELS[i]); buildChains(); pointers.clear(); camPts.clear(); gest = null; resetView();
   state = 'play'; frame = 0; started = false; elapsed = 0;
   $('lvlName').innerHTML = `${levelText(LEVELS[i].id)[0]}<small>LEVEL ${i + 1}</small>`;
   $('menu').hidden = true; $('win').hidden = true; $('pause').hidden = true; $('time').textContent = '0:00.0';
@@ -617,7 +674,7 @@ function tick(now) {
   if (acc >= 1000 / 60) { acc = Math.min(acc - 1000 / 60, 1000 / 60); update(); }
   if (sim) {
     for (const p of pointers.values()) if (p.cx !== undefined) { const q = onPlane({ clientX: p.cx, clientY: p.cy }, p.g.tz); if (q) { p.g.tx = q[0]; p.g.ty = q[1]; } }
-    syncChains(); syncMarkers();
+    syncChains(); syncMarkers(); syncPins();
   }
   const dtE = Math.min(0.05, (now - (tick.lastE || now)) / 1000); tick.lastE = now;
   for (let k = effects.length - 1; k >= 0; k--) if (!effects[k].update(dtE)) { effects[k].cleanup(); effects.splice(k, 1); }
@@ -669,6 +726,7 @@ function checkClasp() {
 function closeNecklace(ci) {
   const c = sim.chains[ci];
   for (const [id, p] of [...pointers]) if (sim.chainOf(p.g.i) === c) { sim.release(p.g); pointers.delete(id); }
+  clearPins(c);
   claspClick(true);
   vanish(ci);
   const remain = sim.chains.filter(q => !q.removed).length;
@@ -695,7 +753,7 @@ function win() {
   if (isBest) store('hodoke4-best-' + level, String(Math.round(elapsed)));
   $('winRes').innerHTML = `<b>${fmt(elapsed)}</b>　${isBest ? t('newBest') : t('fastest', fmt(prev))}<br>${t('untangled', levelText(LEVELS[level].id)[0])}`;
   $('nextBtn').hidden = level >= LEVELS.length - 1;
-  lastResult = { id: LEVELS[level].id, ms: Math.round(elapsed) };
+  lastResult = { id: LEVELS[level].id, board: rankIdOf(LEVELS[level]), ms: Math.round(elapsed) };
   $('win').hidden = false;
   showRankingAfterWin();
 }
@@ -740,7 +798,7 @@ async function submitScore(name) {
   const line = $('rankLine'), r = lastResult; if (!r) return;
   line.textContent = t('rankSending');
   try {
-    const out = await api('rpc/submit_score', { method: 'POST', body: JSON.stringify({ p_level: r.id, p_player: playerId(), p_name: name, p_ms: r.ms }) });
+    const out = await api('rpc/submit_score', { method: 'POST', body: JSON.stringify({ p_level: r.board || r.id, p_player: playerId(), p_name: name, p_ms: r.ms }) });
     r.rank = out.rank; r.total = out.total;
     line.innerHTML = t('rankResult', out.rank, out.total) + (out.best < r.ms ? '<br>' + t('rankBestNote', fmt(out.best)) : '');
   } catch (e) {
@@ -763,7 +821,7 @@ async function openBoard(i) {
   LEVELS.forEach((L, k) => { const b = document.createElement('button'); b.type = 'button'; b.role = 'tab'; b.textContent = levelText(L.id)[0]; b.setAttribute('aria-selected', String(k === i)); b.onclick = () => openBoard(k); tabs.appendChild(b); });
   const list = $('boardList'); list.innerHTML = `<li class="empty">${t('loading')}</li>`;
   try {
-    const rows = await api(`scores?select=name,ms,player&level=eq.${LEVELS[i].id}&order=ms.asc,updated_at.asc&limit=50`);
+    const rows = await api(`scores?select=name,ms,player&level=eq.${rankIdOf(LEVELS[i])}&order=ms.asc,updated_at.asc&limit=50`);
     if (boardLevel !== i) return;
     const me = store('hodoke-player');
     list.innerHTML = rows.length ? rows.map((r, k) => `<li class="${r.player === me ? 'me' : ''}"><span class="pos">${k + 1}</span><span class="nm">${esc(nameAllowed(r.name) ? r.name : '＊＊＊')}</span><span>${fmt(r.ms)}</span></li>`).join('') : `<li class="empty">${t('boardEmpty')}</li>`;
@@ -800,7 +858,7 @@ function resumeGame() {
 }
 function openMenu() {
   for (const p of pointers.values()) sim && sim.release(p.g);
-  pointers.clear(); buildLevels(); $('menu').hidden = false; $('win').hidden = true; $('pause').hidden = true;
+  pointers.clear(); clearPins(); buildLevels(); $('menu').hidden = false; $('win').hidden = true; $('pause').hidden = true;
   if (state !== 'over') state = 'menu';
 }
 $('menuBtn').onclick = openMenu; $('winMenu').onclick = openMenu;
@@ -812,6 +870,14 @@ $('pauseBtn').onclick = () => { unlockAudio(); pauseGame(); };
 $('resumeBtn').onclick = () => resumeGame();
 $('soundBtn').onclick = () => { unlockAudio(); setMuted(!muted); };
 setMuted(muted);
+$('quitBtn').hidden = !PLATFORM.quit;
+$('quitBtn').onclick = () => window.close();
+// keyboard (PC): Esc pauses / resumes, Backspace or Delete pulls out every pin
+document.addEventListener('keydown', e => {
+  if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  if (e.key === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'paused' && $('howto').hidden) resumeGame(); }
+  else if ((e.key === 'Backspace' || e.key === 'Delete') && state === 'play') clearPins();
+});
 $('nextBtn').onclick = () => start(Math.min(LEVELS.length - 1, level + 1));
 
 // leaving the app (home button, call...) pauses the clock and the sound
@@ -843,7 +909,7 @@ function setAdSpace(h) {
 }
 async function startAds() {
   const cap = window.Capacitor, AdMob = cap && cap.Plugins && cap.Plugins.AdMob;
-  if (!AdMob || !cap.isNativePlatform || !cap.isNativePlatform()) return;
+  if (!PLATFORM.ads || !AdMob || !cap.isNativePlatform || !cap.isNativePlatform()) return;
   const platform = cap.getPlatform();
   setAdSpace(56); // typical adaptive banner height; corrected once the ad reports its size
   try {
@@ -871,7 +937,7 @@ function applyLang() {
   document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
   document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
   const pc = !isTouchApp() && window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
-  $('rules').innerHTML = t(pc ? 'rulesPC' : 'rulesTouch');
+  $('rules').innerHTML = t(PLATFORM.pins ? 'rulesSteam' : pc ? 'rulesPC' : 'rulesTouch');
   $('soundBtn').textContent = muted ? t('soundOff') : t('soundOn');
   if (sim && state !== 'menu' && LEVELS[level]) $('lvlName').innerHTML = `${levelText(LEVELS[level].id)[0]}<small>LEVEL ${level + 1}</small>`;
   buildLevels();

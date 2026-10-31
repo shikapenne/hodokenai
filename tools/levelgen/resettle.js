@@ -1,6 +1,9 @@
 const {Sim}=require('../src/sim.js');const fs=require('fs');
-const LV=JSON.parse(fs.readFileSync('../src/levels.json','utf8'));
-for(const [f,ch] of LV.map(L=>[L.id,L.chains])){
+// usage: node resettle.js [levels file, default levels.json] [only these ids, e.g. L101,L102]
+const PHONE=JSON.parse(fs.readFileSync('../src/levels.json','utf8'));
+const LV=JSON.parse(fs.readFileSync('../src/'+(process.argv[2]||'levels.json'),'utf8')).map(L=>({...PHONE.find(P=>P.id===L.id),...L}));
+const ONLY=process.argv[3]?process.argv[3].split(','):null;
+for(const [f,ch] of LV.filter(L=>!ONLY||ONLY.includes(L.id)).map(L=>[L.id,L.chains])){
  const b=Buffer.from(fs.readFileSync('../src/levels/'+f+'.b64','utf8'),'base64');const i16=new Int16Array(b.buffer,b.byteOffset,b.length/2);
  const s=new Sim(360,640,{chains:ch.map(([kind,links,stones])=>({kind,links,stones}))},1,Float32Array.from(i16,v=>v/20));
  const c0=s.crossings();for(let k=0;k<1200;k++)s.step();

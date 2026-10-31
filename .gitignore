@@ -3,3 +3,6 @@ www/
 .DS_Store
 *.keystore
 *.jks
+desktop/www/
+desktop/dist/
+desktop/node_modules/

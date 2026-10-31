@@ -3,6 +3,7 @@
 
   python3 tools/build_web.py           -> www/index.html, www/three.min.js, www/fonts/*
   python3 tools/build_web.py --artifact out.html   -> single-file web version (CDN three.js, Google Fonts)
+  python3 tools/build_web.py --target steam        -> desktop/www/ for the PC (Steam) build: no ads, pins, its own levels
 
 Fonts are cut down to exactly the characters the game shows, so the app ships
 a few hundred KB of fonts instead of ~22 MB.
@@ -16,13 +17,27 @@ NM = os.path.join(ROOT, 'node_modules')
 
 def read(p): return open(os.path.join(SRC, p), encoding='utf-8').read()
 
-def levels_js():
+# what each build turns on (read by game3d.js as PLATFORM)
+PLATFORMS = {
+    'mobile': {'id': 'mobile', 'ads': True, 'pins': False, 'maxPins': 0, 'quit': False},
+    'steam':  {'id': 'steam', 'ads': False, 'pins': True, 'maxPins': 3, 'quit': True},
+}
+LEVEL_FILES = {'mobile': 'levels.json', 'steam': 'levels_steam.json'}
+
+def level_list(target):
+    """levels_steam.json may list a phone level by id only ({"id": "L1", "rank": "L201"}); its shape comes from levels.json"""
+    phone = {L['id']: L for L in json.load(open(os.path.join(SRC, 'levels.json'), encoding='utf-8'))}
+    out = []
+    for L in json.load(open(os.path.join(SRC, LEVEL_FILES[target]), encoding='utf-8')):
+        out.append({**phone.get(L['id'], {}), **L})
+    return out
+
+def levels_js(target='mobile'):
     items = []
-    for L in json.load(open(os.path.join(SRC, 'levels.json'), encoding='utf-8')):
+    for L in level_list(target):
         pos = open(os.path.join(SRC, 'levels', L['id'] + '.b64')).read().strip()
-        items.append('  { id: %s, name: %s, desc: %s, chains: %s, pos: "%s" }' % (
-            json.dumps(L['id']), json.dumps(L['name'], ensure_ascii=False), json.dumps(L['desc'], ensure_ascii=False),
-            json.dumps(L['chains']), pos))
+        items.append('  { id: %s, rank: %s, chains: %s, pos: "%s" }' % (
+            json.dumps(L['id']), json.dumps(L.get('rank', L['id'])), json.dumps(L['chains']), pos))
     return 'const LEVELS = [\n' + ',\n'.join(items) + '\n];'
 
 def write_server_sql(ng):
@@ -38,11 +53,11 @@ insert into public.ng_words (word, exact) values
 """
     open(os.path.join(ROOT, 'server', 'supabase.sql'), 'w', encoding='utf-8').write(base + words)
 
-def page_body():
+def page_body(target='mobile'):
     t = read('template3d.html')
     ng = json.load(open(os.path.join(SRC, 'ngwords.json'), encoding='utf-8'))
     ngjs = 'const NG_WORDS = ' + json.dumps({'contains': ng['contains'], 'exact': ng['exact']}, ensure_ascii=False) + ';'
-    game = read('i18n.js').replace('/*NGWORDS*/', ngjs) + '\n' + read('game3d.js').replace('/*LEVELS*/', levels_js())
+    game = read('i18n.js').replace('/*NGWORDS*/', ngjs) + '\n' + read('game3d.js').replace('/*PLATFORM*/', 'var PLATFORM = ' + json.dumps(PLATFORMS[target]) + ';').replace('/*LEVELS*/', levels_js(target))
     write_server_sql(ng)
     return t.replace('/*SIM*/', read('sim.js')).replace('/*GAME*/', game)
 
@@ -85,8 +100,10 @@ def subset_fonts(text):
                 css.append(f"@font-face{{font-family:'{fam}';font-style:normal;font-weight:{w};font-display:swap;src:url(fonts/{name}) format('woff2');unicode-range:{rng};}}")
     open(os.path.join(WWW, 'fonts.css'), 'w', encoding='utf-8').write('\n'.join(css))
 
-def build_app():
-    body = page_body()
+def build_app(target='mobile'):
+    global WWW
+    if target == 'steam': WWW = os.path.join(ROOT, 'desktop', 'www')
+    body = page_body(target)
     body = re.sub(r'<link rel="preconnect"[^>]*>\n?', '', body)
     body = re.sub(r'<link rel="stylesheet" href="https://fonts.googleapis.com[^>]*>\n?', '', body)
     body = body.replace('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>', '<script src="three.min.js"></script>')
@@ -114,4 +131,5 @@ def build_artifact(out):
 
 if __name__ == '__main__':
     if len(sys.argv) > 2 and sys.argv[1] == '--artifact': build_artifact(sys.argv[2])
+    elif len(sys.argv) > 2 and sys.argv[1] == '--target': build_app(sys.argv[2])
     else: build_app()
