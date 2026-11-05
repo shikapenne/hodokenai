@@ -55,16 +55,23 @@ declare
   best integer;
   r integer;
   total integer;
+  old_name text;
 begin
   p_name := btrim(regexp_replace(p_name, '\s+', ' ', 'g'));
   if not name_allowed(p_name) then
     raise exception 'name_rejected';
+  end if;
+  -- a new name starts with a clean slate of reports
+  select name into old_name from scores where level = p_level and player = p_player;
+  if old_name is not null and old_name <> p_name then
+    delete from name_reports where level = p_level and player = p_player;
   end if;
   insert into scores as s (level, player, name, ms)
   values (p_level, p_player, p_name, p_ms)
   on conflict (level, player) do update
     set ms = least(s.ms, excluded.ms),
         name = excluded.name,
+        reports = case when s.name <> excluded.name then 0 else s.reports end,
         updated_at = case when excluded.ms < s.ms then now() else s.updated_at end;
   select ms into best from scores where level = p_level and player = p_player;
   select count(*) + 1 into r from scores where level = p_level and ms < best;
@@ -75,6 +82,37 @@ $$;
 
 revoke all on function public.submit_score(text, uuid, text, integer) from public;
 grant execute on function public.submit_score(text, uuid, text, integer) to anon;
+
+-- 名前の報告：3人以上から報告された名前は、ランキングで「＊＊＊」と表示される。
+-- 同じ人が同じ名前を何度報告しても1回と数える。自分の名前は報告できない。
+alter table public.scores add column if not exists reports integer not null default 0;
+create table if not exists public.name_reports (
+  level      text        not null,
+  player     uuid        not null,
+  reporter   uuid        not null,
+  created_at timestamptz not null default now(),
+  primary key (level, player, reporter)
+);
+alter table public.name_reports enable row level security; -- no policies: only the function below can touch it
+
+create or replace function public.report_name(p_level text, p_player uuid, p_reporter uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare n integer;
+begin
+  if p_player = p_reporter then return 0; end if;
+  if not exists (select 1 from scores where level = p_level and player = p_player) then return 0; end if;
+  insert into name_reports (level, player, reporter) values (p_level, p_player, p_reporter) on conflict do nothing;
+  select count(*) into n from name_reports where level = p_level and player = p_player;
+  update scores set reports = n where level = p_level and player = p_player;
+  return n;
+end;
+$$;
+revoke all on function public.report_name(text, uuid, uuid) from public;
+grant execute on function public.report_name(text, uuid, uuid) to anon;
 
 -- banned words (generated from tools/src/ngwords.json; re-run this whole file after editing that list)
 delete from public.ng_words;

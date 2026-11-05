@@ -123,8 +123,16 @@ const cursorMat = new THREE.MeshBasicMaterial({ color: 0xf1e8d8, transparent: tr
 const holdMat = new THREE.MeshBasicMaterial({ color: 0xd1ab55, transparent: true, opacity: 0.9, depthTest: false });
 const cursorGeo = new THREE.RingGeometry(9, 11, 28);
 
+// dotted line between the two ends of a free necklace: "bring these together"
+let hintLines = [];
+function hintLine() {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const l = new THREE.Line(g, new THREE.LineDashedMaterial({ color: 0xffd27a, dashSize: 4, gapSize: 3, transparent: true, depthTest: false }));
+  l.renderOrder = 9; l.visible = false; l.frustumCulled = false; scene.add(l); hintLines.push(l); return l;
+}
 function buildChains() {
-  for (const m of [...linkMeshes, ...pearlMeshes, ...extras]) { scene.remove(m); if (m.dispose) m.dispose(); }
+  for (const m of [...linkMeshes, ...pearlMeshes, ...extras, ...hintLines]) { scene.remove(m); if (m.dispose) m.dispose(); }
+  hintLines = [];
   for (const f of effects) f.cleanup(); effects.length = 0;
   linkMeshes = []; pearlMeshes = []; extras = [];
   kindOf = new Array(sim.N); sim.chains.forEach(c => { for (let i = c.start; i < c.start + c.n; i++) kindOf[i] = c.kind; for (const p of c.pends) kindOf[p] = 'pearl'; });
@@ -148,6 +156,7 @@ function buildChains() {
       bail.userData = { at: sim.pendAt[P], P, chain: c, hang: 3.2, bail: true }; scene.add(bail); extras.push(bail);
     });
     const endMat = metalMat(c.kind === 'pearl' ? 'gold' : c.kind).clone(); endMat.emissive = new THREE.Color(0xffd27a); endMat.emissiveIntensity = 0; c.endMat = endMat;
+    c.hintLine = hintLine();
     const clasp = new THREE.Mesh(claspGeo, endMat); clasp.castShadow = true; clasp.scale.setScalar(big);
     clasp.userData = { at: c.start, next: c.start + 1, chain: c }; scene.add(clasp); extras.push(clasp);
     const ring = new THREE.Mesh(ringGeo, endMat); ring.castShadow = true; ring.scale.setScalar(big);
@@ -194,6 +203,15 @@ function syncChains() {
   }
   const pulse = 0.45 + 0.4 * Math.sin(performance.now() / 180);
   for (const c of sim.chains) if (c.endMat && !c.removed) c.endMat.emissiveIntensity = c.freeHint ? pulse : 0;
+  for (const c of sim.chains) {
+    const L = c.hintLine; if (!L) continue;
+    const a = c.start, b = c.start + c.n - 1;
+    const show = c.freeHint && !c.removed && Math.hypot(px[a] - px[b], py[a] - py[b]) > 16;
+    L.visible = show; if (!show) continue;
+    L.geometry.attributes.position.array.set([px[a] - W / 2, pz[a] + 3, py[a] - H / 2, px[b] - W / 2, pz[b] + 3, py[b] - H / 2]);
+    L.geometry.attributes.position.needsUpdate = true; L.computeLineDistances();
+    L.material.opacity = 0.35 + 0.6 * (pulse - 0.05) / 0.8;
+  }
   for (const e of extras) {
     if (e.userData.chain.removed) continue;
     const i = e.userData.at;
@@ -719,7 +737,7 @@ function checkClasp() {
       c.claspArmed = false;
       const ci = sim.chains.indexOf(c), r = sim.tangleCheck(ci);
       if (r.free) { closeNecklace(ci); return; }
-      showToast(t('stillTangled'), 2000); hapticTap(); claspClick(false); flashSpots(r.woven);
+      showToast(t(r.reason === 'woven' ? 'stillWoven' : r.reason === 'knot' ? 'stillKnot' : 'stillTangled'), 2200); hapticTap(); claspClick(false); flashSpots(r.woven);
     }
   }
 }
@@ -821,11 +839,44 @@ async function openBoard(i) {
   LEVELS.forEach((L, k) => { const b = document.createElement('button'); b.type = 'button'; b.role = 'tab'; b.textContent = levelText(L.id)[0]; b.setAttribute('aria-selected', String(k === i)); b.onclick = () => openBoard(k); tabs.appendChild(b); });
   const list = $('boardList'); list.innerHTML = `<li class="empty">${t('loading')}</li>`;
   try {
-    const rows = await api(`scores?select=name,ms,player&level=eq.${rankIdOf(LEVELS[i])}&order=ms.asc,updated_at.asc&limit=50`);
+    const rows = await api(`scores?select=name,ms,player,reports&level=eq.${rankIdOf(LEVELS[i])}&order=ms.asc,updated_at.asc&limit=50`);
     if (boardLevel !== i) return;
-    const me = store('hodoke-player');
-    list.innerHTML = rows.length ? rows.map((r, k) => `<li class="${r.player === me ? 'me' : ''}"><span class="pos">${k + 1}</span><span class="nm">${esc(nameAllowed(r.name) ? r.name : '＊＊＊')}</span><span>${fmt(r.ms)}</span></li>`).join('') : `<li class="empty">${t('boardEmpty')}</li>`;
+    boardRows = rows; drawBoard();
   } catch (e) { list.innerHTML = `<li class="empty">${t('boardError')}</li>`; }
+}
+// names other players can report or hide. Hidden names are kept on this device only;
+// a name reported by 3 or more players is masked for everyone.
+let boardRows = [];
+const hiddenPlayers = () => { try { return new Set(JSON.parse(store('hodoke-hidden') || '[]')); } catch (e) { return new Set(); } };
+function setHidden(id, on) { const h = hiddenPlayers(); if (on) h.add(id); else h.delete(id); store('hodoke-hidden', JSON.stringify([...h].slice(-500))); }
+function drawBoard() {
+  const list = $('boardList'), me = store('hodoke-player'), hid = hiddenPlayers();
+  list.innerHTML = '';
+  if (!boardRows.length) { list.innerHTML = `<li class="empty">${t('boardEmpty')}</li>`; return; }
+  boardRows.forEach((r, k) => {
+    const mine = r.player === me, masked = !nameAllowed(r.name) || (r.reports || 0) >= 3 || hid.has(r.player);
+    const li = document.createElement('li'); if (mine) li.className = 'me';
+    li.innerHTML = `<span class="pos">${k + 1}</span><span class="nm">${esc(masked ? '＊＊＊' : r.name)}</span><span>${fmt(r.ms)}</span>`;
+    if (!mine) {
+      const more = document.createElement('button'); more.type = 'button'; more.className = 'more'; more.textContent = '⋯'; more.setAttribute('aria-label', t('more'));
+      more.onclick = () => rowMenu(li, r, hid.has(r.player));
+      li.appendChild(more);
+    } else li.appendChild(document.createElement('span'));
+    list.appendChild(li);
+  });
+}
+function rowMenu(li, r, isHidden) {
+  const old = $('boardList').querySelector('.row-menu'); if (old) old.remove();
+  const m = document.createElement('li'); m.className = 'row-menu';
+  const btn = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = label; b.onclick = fn; m.appendChild(b); };
+  btn(t('report'), async () => {
+    setHidden(r.player, true);
+    try { await api('rpc/report_name', { method: 'POST', body: JSON.stringify({ p_level: rankIdOf(LEVELS[boardLevel]), p_player: r.player, p_reporter: playerId() }) }); } catch (e) {}
+    showToast(t('reported'), 2200); drawBoard();
+  });
+  btn(isHidden ? t('showName') : t('hideName'), () => { setHidden(r.player, !isHidden); drawBoard(); });
+  btn(t('cancel'), () => m.remove());
+  li.after(m);
 }
 $('boardBtn').onclick = () => openBoard(level);
 $('boardClose').onclick = () => { $('board').hidden = true; };

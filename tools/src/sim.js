@@ -541,7 +541,7 @@ class Sim {
     }
     const woven = [];
     for (const [o, m] of side) if (m === 3) woven.push(...spots.get(o));
-    if (woven.length) return { free: false, woven };
+    if (woven.length) return { free: false, woven, reason: 'woven' };
     // closing strand from the last link straight back to the first, above everything: it crosses the chain only as the over-strand
     const ex = px[c.start + nS], ey = py[c.start + nS], bx = px[c.start], by = py[c.start];
     const X = self.map(e => e.pOver ? { over: e.p, under: e.q, x: e.x, y: e.y } : { over: e.q, under: e.p, x: e.x, y: e.y });
@@ -551,7 +551,7 @@ class Sim {
       if (hit) X.push({ over: nS + hit[0], under: k + hit[1], x: 0, y: 0 });
     }
     if (knotDet(X) === 1) return { free: true, woven: [] };
-    return { free: false, woven: X.filter(e => e.over < nS).map(e => [e.x, e.y]) };
+    return { free: false, woven: X.filter(e => e.over < nS).map(e => [e.x, e.y]), reason: 'knot' };
   }
 
   // number of crossings in the top-down projection
