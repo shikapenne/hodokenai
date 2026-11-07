@@ -779,7 +779,9 @@ function win() {
 // ---------- online ranking (Supabase) ----------
 // Fill these in from your Supabase project (Settings > API). Empty = ranking hidden, X posting still works.
 const RANKING = { url: 'https://xzimzkbrhgymavvkzaik.supabase.co', anonKey: 'sb_publishable_l6KHmDsxXfVq7xiZHo5qCw_QfoJOj91' };
-const STORE_URL = ''; // store page to put in posts once the app is public
+// store page added to posts on X (Android / web for now; the iPhone and Steam builds get theirs when they launch)
+const STORE_URL = PLATFORM.id === 'mobile' && !(window.Capacitor && Capacitor.getPlatform && Capacitor.getPlatform() === 'ios')
+  ? 'https://play.google.com/store/apps/details?id=jp.shikapenne.hodokenai' : '';
 const rankingOn = () => !!(RANKING.url && RANKING.anonKey);
 function playerId() {
   let id = store('hodoke-player');
@@ -945,11 +947,10 @@ document.addEventListener('visibilitychange', () => {
 try { const sb = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar; if (sb) { sb.setStyle({ style: 'DARK' }); sb.setOverlaysWebView({ overlay: true }); } } catch (e) {}
 
 // ---------- banner ad (app only) ----------
-// IDs below are Google's public TEST units. Replace with your own from AdMob before release
-// (and set testing to false). See README "広告".
+// Android uses the real AdMob banner unit. iOS still has Google's public TEST unit until the iPhone app is set up in AdMob.
 const ADS = {
-  // true = Google's test ads (while testing). Set to false when the app goes public, so the real banner shows.
-  testing: true,
+  // false = real ads (the app is public). Set back to true while testing on your own phone if needed.
+  testing: false,
   android: 'ca-app-pub-2112904724600297/8986796706',
   ios: 'ca-app-pub-3940256099942544/2435281174',
 };
