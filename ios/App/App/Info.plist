@@ -29,7 +29,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSUserTrackingUsageDescription</key>
-	<string>あなたの興味に合った広告を表示するために使用します。許可しなくてもゲームはすべて遊べます。</string>
+	<string>あなたの興味に合った広告を表示するために使用します。許可しなくてもゲームはすべて遊べます。 / Used to show ads that suit your interests. The whole game works without it.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
