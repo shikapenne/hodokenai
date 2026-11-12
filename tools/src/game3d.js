@@ -267,13 +267,18 @@ function unlockAudio() {
     }
     // iOS can leave the sound 'interrupted' (an ad, the keyboard, another app): wake it on the next tap
     if (audio.state !== 'running') audio.resume().catch(() => {});
+    // iOS only really starts the sound after something is played inside the tap itself
+    if (!unlockAudio.primed || audio.state !== 'running') {
+      const b = audio.createBuffer(1, 1, audio.sampleRate), src = audio.createBufferSource();
+      src.buffer = b; src.connect(audio.destination); src.start(0); unlockAudio.primed = true;
+    }
   } catch (e) {}
 }
 function setMuted(m) {
   muted = m; try { localStorage.setItem('hodoke-muted', m ? '1' : '0'); } catch (e) {}
   if (master) master.gain.value = m ? 0 : 1;
-  $('soundBtn').textContent = m ? t('soundOff') : t('soundOn');
-  $('soundBtn').setAttribute('aria-pressed', String(!m));
+  $('soundBtn').setAttribute('aria-checked', String(!m));
+  $('soundBtn').setAttribute('aria-label', m ? t('soundOff') : t('soundOn'));
 }
 
 // ---- chain sounds: a fine "shara-shara" rustle of very short, very high grains (sample B) ----
@@ -945,7 +950,9 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 // any tap also wakes the sound if the system paused it
-document.addEventListener('pointerdown', () => { if (audio && audio.state !== 'running') unlockAudio(); }, true);
+// iOS counts only some events as a real tap for sound (touchend, click), so try on all of them
+for (const ev of ['pointerdown', 'touchend', 'click', 'keydown'])
+  document.addEventListener(ev, () => { if (!audio || audio.state !== 'running') unlockAudio(); }, true);
 // status bar: light text over the dark velvet, drawn over the page
 try { const sb = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar; if (sb) { sb.setStyle({ style: 'DARK' }); sb.setOverlaysWebView({ overlay: true }); } } catch (e) {}
 
@@ -993,7 +1000,7 @@ function applyLang() {
   document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
   const pc = !isTouchApp() && window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
   $('rules').innerHTML = t(PLATFORM.pins ? 'rulesSteam' : pc ? 'rulesPC' : 'rulesTouch');
-  $('soundBtn').textContent = muted ? t('soundOff') : t('soundOn');
+  $('soundBtn').setAttribute('aria-label', muted ? t('soundOff') : t('soundOn'));
   if (sim && state !== 'menu' && LEVELS[level]) $('lvlName').innerHTML = `${levelText(LEVELS[level].id)[0]}<small>LEVEL ${level + 1}</small>`;
   buildLevels();
 }

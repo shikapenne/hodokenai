@@ -43,6 +43,13 @@ body {
 .pause-card { justify-items: center; text-align: center; width: min(320px, 100%); }
 .pause-list { display: grid; gap: 10px; width: 100%; }
 .pause-list .btn { padding: 13px 18px; font-size: 15px; }
+/* sound on/off as a switch: brass track with the knob on the right = on */
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.switch { position: relative; width: 46px; height: 26px; border-radius: 13px; background: rgba(255,255,255,0.14); border: 1px solid var(--line); flex: none; transition: background .18s; }
+.switch .knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--ivory); transition: transform .18s; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.switch-row[aria-checked="true"] .switch { background: var(--brass); border-color: var(--brass); }
+.switch-row[aria-checked="true"] .switch .knob { transform: translateX(20px); background: #1a1326; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch .knob { transition: none; } }
 .snd:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .lvl { font-family: var(--f-display); font-weight: 800; font-size: 17px; letter-spacing: 0.04em; min-width: 0; flex-shrink: 0; max-width: 8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lvl small { display: block; font-family: var(--f-body); font-weight: 500; font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
@@ -179,7 +186,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
       <div class="big" data-i18n="pause">ポーズ</div>
       <div class="pause-list">
         <button class="btn primary" id="resumeBtn" type="button" data-i18n="resume">つづける</button>
-        <button class="btn" id="soundBtn" type="button" aria-pressed="true">音 オン</button>
+        <button class="btn switch-row" id="soundBtn" type="button" role="switch" aria-checked="true"><span data-i18n="sound">音</span><span class="switch" aria-hidden="true"><span class="knob"></span></span></button>
         <button class="btn" id="howtoBtn" type="button" data-i18n="howTo">遊び方</button>
         <button class="btn" id="retryBtn" type="button" data-i18n="retry">最初から</button>
         <button class="btn" id="menuBtn" type="button" data-i18n="levels">レベル選択</button>

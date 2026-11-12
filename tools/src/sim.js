@@ -6,6 +6,8 @@ const CHAIN_SIZE = { kihei: { r: 6.5, d: 12 } };
 function sizeOf(kind) { return CHAIN_SIZE[kind] || { r: R, d: D }; }
 // pendants: a stone hanging off the middle link. It is a real body that snags on other chains.
 const PEND_R = 4.6, PEND_L = 9;
+// true: a necklace counts as free only with no overlaps at all; false: lying on top / loose kinks are allowed
+let STRICT_FREE = true;
 const hasPendant = c => c.pendant !== undefined ? c.pendant : c.kind !== 'kihei';
 // how many stones hang along a necklace (spread evenly between the ends)
 const stonesOf = c => c.stones !== undefined ? c.stones : (hasPendant(c) ? 1 : 0);
@@ -538,6 +540,13 @@ class Sim {
               spots.get(o).push([px[a0] + (px[a1] - px[a0]) * u, py[a0] + (py[a1] - py[a0]) * u]);
             }
           }
+    }
+    // strict rule: the clasp only closes once the necklace crosses nothing at all, seen from above
+    if (STRICT_FREE) {
+      const other = []; for (const v of spots.values()) other.push(...v);
+      if (other.length) return { free: false, woven: other, reason: 'woven' };
+      if (self.length) return { free: false, woven: self.map(e => [e.x, e.y]), reason: 'knot' };
+      return { free: true, woven: [] };
     }
     const woven = [];
     for (const [o, m] of side) if (m === 3) woven.push(...spots.get(o));
