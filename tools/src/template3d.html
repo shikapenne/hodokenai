@@ -73,9 +73,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
   position: absolute; inset: 0; z-index: 5; display: grid; place-items: center;
   background: rgba(12, 9, 22, 0.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
   padding-block: 20px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  overflow-y: auto;
+  overflow-y: auto; overflow-x: hidden;
 }
-.card { width: min(400px, 100%); display: grid; gap: 16px; }
+.card { width: min(400px, 100%); display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.card > * { min-width: 0; }
 #menu .card { gap: 12px; }
 #menu .levels { gap: 6px; }
 /* PC: many levels sit in two columns on a wide screen */
@@ -115,8 +116,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 :root[lang="ko"] { --f-display: "AppleMyungjo", "Noto Serif KR", "Noto Serif CJK KR", serif; --f-body: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif; }
 .rank-box { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
 .name-row { display: grid; gap: 6px; font-size: 12.5px; color: var(--muted); }
-.name-input { display: flex; gap: 8px; }
-.name-input input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--ivory); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.name-input { display: flex; gap: 8px; min-width: 0; }
+.name-input .btn { flex: none; }
+.name-input input { flex: 1; min-width: 0; width: 100%; font: inherit; font-size: 16px; color: var(--ivory); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
 .name-input input:focus-visible { outline: 2px solid var(--brass); outline-offset: 1px; }
 .rank-line { font-size: 14px; color: var(--muted); line-height: 1.7; font-variant-numeric: tabular-nums; }
 .rank-line b { color: var(--brass); font-size: 20px; }

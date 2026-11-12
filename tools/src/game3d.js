@@ -265,7 +265,8 @@ function unlockAudio() {
       noiseBuf = audio.createBuffer(1, audio.sampleRate * 0.25, audio.sampleRate);
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     }
-    if (audio.state === 'suspended') audio.resume();
+    // iOS can leave the sound 'interrupted' (an ad, the keyboard, another app): wake it on the next tap
+    if (audio.state !== 'running') audio.resume().catch(() => {});
   } catch (e) {}
 }
 function setMuted(m) {
@@ -915,7 +916,7 @@ function openMenu() {
   if (state !== 'over') state = 'menu';
 }
 $('menuBtn').onclick = openMenu; $('winMenu').onclick = openMenu;
-$('retryBtn').onclick = () => start(level);
+$('retryBtn').onclick = () => { unlockAudio(); start(level); };
 $('howtoBtn').onclick = () => showHowto(true);
 $('howtoClose').onclick = () => { unlockAudio(); closeHowto(); };
 $('viewBtn').onclick = () => resetView();
@@ -931,7 +932,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'paused' && $('howto').hidden) resumeGame(); }
   else if ((e.key === 'Backspace' || e.key === 'Delete') && state === 'play') clearPins();
 });
-$('nextBtn').onclick = () => start(Math.min(LEVELS.length - 1, level + 1));
+$('nextBtn').onclick = () => { unlockAudio(); start(Math.min(LEVELS.length - 1, level + 1)); };
 
 // leaving the app (home button, call...) pauses the clock and the sound
 document.addEventListener('visibilitychange', () => {
@@ -940,9 +941,11 @@ document.addEventListener('visibilitychange', () => {
     try { audio && audio.suspend(); } catch (e) {}
   } else {
     last = performance.now(); acc = 0;
-    try { audio && !muted && audio.resume(); } catch (e) {}
+    try { audio && !muted && audio.resume().catch(() => {}); } catch (e) {}
   }
 });
+// any tap also wakes the sound if the system paused it
+document.addEventListener('pointerdown', () => { if (audio && audio.state !== 'running') unlockAudio(); }, true);
 // status bar: light text over the dark velvet, drawn over the page
 try { const sb = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar; if (sb) { sb.setStyle({ style: 'DARK' }); sb.setOverlaysWebView({ overlay: true }); } } catch (e) {}
 
