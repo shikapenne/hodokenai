@@ -957,12 +957,12 @@ for (const ev of ['pointerdown', 'touchend', 'click', 'keydown'])
 try { const sb = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar; if (sb) { sb.setStyle({ style: 'DARK' }); sb.setOverlaysWebView({ overlay: true }); } } catch (e) {}
 
 // ---------- banner ad (app only) ----------
-// Android uses the real AdMob banner unit. iOS still has Google's public TEST unit until the iPhone app is set up in AdMob.
+// Real AdMob banner units for Android and iOS.
 const ADS = {
   // false = real ads (the app is public). Set back to true while testing on your own phone if needed.
   testing: false,
   android: 'ca-app-pub-2112904724600297/8986796706',
-  ios: 'ca-app-pub-3940256099942544/2435281174',
+  ios: 'ca-app-pub-2112904724600297/9912697699',
 };
 function setAdSpace(h) {
   // reserve the banner's height plus a gap, so no button or chain sits right next to the ad
