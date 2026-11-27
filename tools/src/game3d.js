@@ -974,14 +974,26 @@ async function startAds() {
   if (!PLATFORM.ads || !AdMob || !cap.isNativePlatform || !cap.isNativePlatform()) return;
   const platform = cap.getPlatform();
   setAdSpace(56); // typical adaptive banner height; corrected once the ad reports its size
+  // iOS: Apple's tracking prompt comes first, and no ad code runs until the player has answered.
+  // The native side (SceneDelegate) shows the prompt once the app is active; here we wait for the answer,
+  // and ask again ourselves if the system has not shown it after a few seconds.
+  if (platform === 'ios') {
+    try {
+      const status = async () => (await AdMob.trackingAuthorizationStatus()).status;
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      let asked = false;
+      for (let waited = 0; (await status()) === 'notDetermined'; waited += 500) {
+        if (!asked && waited >= 4000 && document.visibilityState === 'visible') { asked = true; await AdMob.requestTrackingAuthorization(); }
+        await sleep(500);
+      }
+    } catch (e) { console.warn('tracking prompt', e); }
+  }
+  // then the consent form, where the law needs one (EU etc.)
   try {
-    // privacy first: consent form where the law needs one (EU etc.), then Apple's tracking prompt
     const info = await AdMob.requestConsentInfo();
     if (info.isConsentFormAvailable && info.status === 'REQUIRED') await AdMob.showConsentForm();
-    if (platform === 'ios') {
-      const t = await AdMob.trackingAuthorizationStatus();
-      if (t.status === 'notDetermined') await AdMob.requestTrackingAuthorization();
-    }
+  } catch (e) { console.warn('consent', e); }
+  try {
     await AdMob.initialize({ initializeForTesting: ADS.testing });
     AdMob.addListener('bannerAdSizeChanged', s => setAdSpace(s && s.height ? s.height : 0));
     await AdMob.showBanner({ adId: ADS[platform], adSize: 'ADAPTIVE_BANNER', position: 'BOTTOM_CENTER', margin: 0, isTesting: ADS.testing });
